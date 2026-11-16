@@ -23,21 +23,29 @@
 #define MAX_CHAT_MSGS     60
 #define MAX_CHAT_LEN      180
 /* Virtual canvas resolution (base design size) */
-#define VIRT_W 980.0f
 #define VIRT_H 640.0f
+
+static float GetVirtW(void)
+{
+    float sw = (float)GetScreenWidth();
+    float sh = (float)GetScreenHeight();
+    if (sh <= 0.0f) return 980.0f;
+    float w = VIRT_H * (sw / sh);
+    return (w < 860.0f) ? 860.0f : w;
+}
 
 static Camera2D GetUiCamera(void)
 {
     float sw = (float)GetScreenWidth();
     float sh = (float)GetScreenHeight();
-    float scaleX = sw / VIRT_W;
+    float scaleX = sw / GetVirtW();
     float scaleY = sh / VIRT_H;
     float scale  = (scaleX < scaleY) ? scaleX : scaleY;
 
     Camera2D cam = { 0 };
     cam.zoom = scale;
     /* Pusatkan kanvas secara horizontal/vertikal jika rasio layar monitor berbeda */
-    cam.offset.x = (sw - (VIRT_W * scale)) * 0.5f;
+    cam.offset.x = (sw - (GetVirtW() * scale)) * 0.5f;
     cam.offset.y = (sh - (VIRT_H * scale)) * 0.5f;
     return cam;
 }
@@ -199,7 +207,7 @@ static Font GetFontBold(void) { return (fontBold.texture.id > 0)    ? fontBold  
 // static float ContentBottom(void) { return (float)GetScreenHeight() - 26.0f; }
 
 static float ContentX(void)      { return (float)(SIDEBAR_W + CONTENT_PAD); }
-static float ContentW(void)      { return VIRT_W - SIDEBAR_W - (CONTENT_PAD * 2); }
+static float ContentW(void)      { return GetVirtW() - SIDEBAR_W - (CONTENT_PAD * 2); }
 static float ContentBottom(void) { return VIRT_H - 26.0f; }
 
 static void SetStatus(const char *msg, Color c)
@@ -486,7 +494,7 @@ static void Dropdown(DropdownState *d, Rectangle r, const char **items, int coun
     bool clicked = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
 
     /* Batasi tinggi kotak list maksimal 4 item agar tidak kepanjangan */
-    int visibleCount = (count > 4) ? 4 : count;
+    int visibleCount = (count > 3) ? 3 : count;
     float itemH = r.height;
     float totalH = itemH * count;
     float boxH = itemH * visibleCount;
@@ -607,7 +615,7 @@ static void PushChatMessage(int groupIdx, const char *sender, const char *msg, b
 
 static void DrawSplashScreen(void)
 {
-    float sw = VIRT_W;
+    float sw = GetVirtW();
     float sh = VIRT_H;
 
     /* Dekorasi gelombang pastel lembut di bagian bawah */
@@ -636,7 +644,7 @@ static void DrawSplashScreen(void)
     /* Banner Ilustrasi Tagline */
     Rectangle pill = { card.x + 48, card.y + 210, cardW - 96, 62 };
     DrawRectangleRounded(pill, 0.3f, 12, COL_PRIMARY_LT);
-    const char *quote = "Better Learning Together  •  Study Smarter";
+    const char *quote = "Better Learning Together  |  Study Smarter";
     Vector2 qsz = MeasureTextEx(fb, quote, 14.0f, 0.5f);
     DrawTextEx(fb, quote, (Vector2){ pill.x + (pill.width - qsz.x) / 2.0f, pill.y + 23 }, 14.0f, 0.5f, COL_PRIMARY);
 
@@ -733,7 +741,7 @@ static void HandleAuthSubmit(void)
 
 static void DrawAuthScreen(void)
 {
-    float sw = VIRT_W;
+    float sw = GetVirtW();
     float sh = VIRT_H;
 
     float cardW = 470.0f;
@@ -961,7 +969,7 @@ static void DrawHomeScreen(void)
     if (groupCount > 0) {
         DrawTextBold(groups[0].namaGroup, PX(banner.x + 76), PX(banner.y + 22), 20, PX(cw - 270), WHITE);
         char meta[140];
-        snprintf(meta, sizeof meta, "%s  •  Jadwalmu: %s  •  %d/%d Anggota",
+        snprintf(meta, sizeof meta, "%s  |  Jadwalmu: %s  |  %d/%d Anggota",
                  groups[0].matkul, currentUserSched, groups[0].jumlahAnggota, groups[0].maxAnggota);
         DrawTextFit(meta, PX(banner.x + 76), PX(banner.y + 52), 14, PX(cw - 270), (Color){ 195, 215, 248, 255 });
     } else {
@@ -1083,7 +1091,7 @@ static void DrawFindBuddyScreen(void)
         DrawTextBold(buddies[i].nama, PX(card.x + 74), PX(card.y + 15), 17, PX(card.width - 420), COL_TEXT);
 
         char sub[96];
-        snprintf(sub, sizeof sub, "NIM %s  •  %s", buddies[i].nim, buddies[i].matkul);
+        snprintf(sub, sizeof sub, "NIM %s  |  %s", buddies[i].nim, buddies[i].matkul);
         DrawTextFit(sub, PX(card.x + 74), PX(card.y + 40), 14, PX(card.width - 420), COL_MUTED);
 
         /* Badge Jadwal */
@@ -1175,7 +1183,7 @@ static void DrawScheduleScreen(void)
     DrawCard(matchCard, WHITE, COL_BORDER, 16.0f);
 
     char schedTitle[80];
-    snprintf(schedTitle, sizeof schedTitle, "Hari %s, %s Okt  •  Fokus: %s", days[selectedDayIdx], dates[selectedDayIdx], currentUserCourse);
+    snprintf(schedTitle, sizeof schedTitle, "Hari %s, %s Okt  |  Fokus: %s", days[selectedDayIdx], dates[selectedDayIdx], currentUserCourse);
     DrawTextBold(schedTitle, PX(matchCard.x + 18), PX(matchCard.y + 18), 14, PX(rightW - 36), COL_PRIMARY);
 
     int matched = 0;
@@ -1336,7 +1344,7 @@ static void DrawGroupDetailScreen(void)
 
     DrawTextBold(g->namaGroup, PX(topCard.x + 92), PX(topCard.y + 24), 24, PX(cw - 320), COL_NAVY);
     char meta[120];
-    snprintf(meta, sizeof meta, "%s  •  %d/%d Anggota  •  Next Meeting: Perpustakaan Kampus",
+    snprintf(meta, sizeof meta, "%s  |  %d/%d Anggota  |  Next Meeting: Perpustakaan Kampus",
              g->matkul, g->jumlahAnggota, g->maxAnggota);
     DrawTextFit(meta, PX(topCard.x + 92), PX(topCard.y + 56), 14, PX(cw - 320), COL_MUTED);
 
@@ -1467,7 +1475,7 @@ static void DrawChatScreen(void)
 {
     const char *gName = (groupCount > 0 && selectedGroupIdx < groupCount) ? groups[selectedGroupIdx].namaGroup : "Pemrograman C";
     char sub[96];
-    snprintf(sub, sizeof sub, "Diskusi kelompok aktif  •  Login sebagai %s", currentUserName);
+    snprintf(sub, sizeof sub, "Diskusi kelompok aktif  |  Login sebagai %s", currentUserName);
     DrawHeader(gName, sub);
 
     float cx = ContentX();
@@ -1556,11 +1564,15 @@ void GuiUpdateAndDraw(void)
     if (IsKeyPressed(KEY_ESCAPE)) {
         focusId = -1;
         authCourseDd.open = false;
+        authDayDd.open = false;
+        authSessionDd.open = false;
         newGroupCourseDd.open = false;
     }
 
     BeginDrawing();
     ClearBackground(COL_BG);
+
+    BeginMode2D(GetUiCamera());
 
     if (!isLoggedIn) {
         /* Alur Awal Sebelum Masuk Dashboard: Splash Screen -> Sign Up / Log In */
@@ -1582,5 +1594,7 @@ void GuiUpdateAndDraw(void)
     }
 
     DrawToast();
+
+    EndMode2D();
     EndDrawing();
 }

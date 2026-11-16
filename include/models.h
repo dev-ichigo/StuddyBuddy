@@ -5,7 +5,7 @@
 #define MAX_NAMA           50
 #define MAX_NIM            15
 #define MAX_MATKUL         30
-#define MAX_HARI           20
+#define MAX_HARI           40
 #define MAX_GROUP_NAME     40
 #define MAX_GROUP_MEMBERS  5
 #define MAX_GOAL_DESC      100
