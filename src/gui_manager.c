@@ -584,6 +584,26 @@ static void LoginWithBuddyIndex(int idx)
     snprintf(currentUserNim,    sizeof currentUserNim,    "%s", buddies[idx].nim);
     snprintf(currentUserCourse, sizeof currentUserCourse, "%s", buddies[idx].matkul);
     snprintf(currentUserSched,  sizeof currentUserSched,  "%s", buddies[idx].hari);
+
+    /* Sinkronkan pilihan hari & slot jam di Match Schedule dengan jadwal akun user */
+    selectedDayIdx = 0;
+    for (int i = 0; i < 5; i++) slotChecked[i] = false;
+
+    for (int d = 0; d < DAY_OPTION_COUNT; d++) {
+        if (strstr(buddies[idx].hari, DAY_OPTIONS[d]) != NULL) {
+            selectedDayIdx = d;
+            break;
+        }
+    }
+
+    bool foundSlot = false;
+    for (int s = 0; s < SESSION_OPTION_COUNT && s < 5; s++) {
+        if (strstr(buddies[idx].hari, SESSION_OPTIONS[s]) != NULL) {
+            slotChecked[s] = true;
+            foundSlot = true;
+        }
+    }
+    if (!foundSlot) slotChecked[0] = true;
 }
 
 static void SeedInitialChat(void)
@@ -1125,47 +1145,35 @@ static void DrawScheduleScreen(void)
     float cx = ContentX();
     float cw = ContentW();
 
-    static const char *days[]  = { "Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min" };
-    static const char *dates[] = { "21", "22", "23", "24", "25", "26", "27" };
-    static const char *slots[] = {
-        "08.00 - 10.00  (Sesi Pagi)",
-        "10.00 - 12.00  (Sesi Siang 1)",
-        "12.00 - 14.00  (Sesi Siang 2)",
-        "14.00 - 16.00  (Sesi Sore)",
-        "16.00 - 18.00  (Sesi Petang)"
-    };
-
-    /* Baris Pemilih Hari (Sen 21 - Min 27) */
+    /* Baris Pemilih Hari (Senin - Minggu tanpa angka tanggal, merata penuh) */
     float dayW = (cw - 6 * 10.0f) / 7.0f;
-    for (int d = 0; d < 7; d++) {
-        Rectangle dr = { cx + d * (dayW + 10.0f), 96, dayW, 64 };
+    for (int d = 0; d < DAY_OPTION_COUNT; d++) {
+        Rectangle dr = { cx + d * (dayW + 10.0f), 96, dayW, 48 };
         bool sel = (d == selectedDayIdx);
         bool hover = MouseOver(dr);
         DrawCard(dr, sel ? COL_PRIMARY : (hover ? COL_PRIMARY_LT : WHITE), sel ? COL_PRIMARY : COL_BORDER, 14.0f);
 
         Font fb = GetFontBold();
-        Font fr = GetFontReg();
-        Vector2 s1 = MeasureTextEx(fr, days[d], 13.0f, 0.5f);
-        Vector2 s2 = MeasureTextEx(fb, dates[d], 18.0f, 0.5f);
-        DrawTextEx(fr, days[d],  (Vector2){ dr.x + (dayW - s1.x)/2, dr.y + 12 }, 13.0f, 0.5f, sel ? WHITE : COL_MUTED);
-        DrawTextEx(fb, dates[d], (Vector2){ dr.x + (dayW - s2.x)/2, dr.y + 32 }, 18.0f, 0.5f, sel ? WHITE : COL_TEXT);
+        Vector2 s1 = MeasureTextEx(fb, DAY_OPTIONS[d], 15.0f, 0.5f);
+        DrawTextEx(fb, DAY_OPTIONS[d], (Vector2){ dr.x + (dayW - s1.x) / 2.0f, dr.y + (dr.height - s1.y) / 2.0f },
+                   15.0f, 0.5f, sel ? WHITE : COL_TEXT);
 
         if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) selectedDayIdx = d;
     }
 
-    /* Kolom Kiri: Pilihan Jam Kosong */
+    /* Kolom Kiri: Pilihan Jam Kosong (sesuai SESSION_OPTIONS saat Sign Up) */
     float leftW = (cw - 20.0f) * 0.52f;
     float rightW = cw - leftW - 20.0f;
-    float topY = 178.0f;
+    float topY = 162.0f;
 
     DrawTextBold("Pilih Slot Jam Kosongmu:", PX(cx), PX(topY), 16, 260, COL_NAVY);
-    for (int s = 0; s < 5; s++) {
+    for (int s = 0; s < SESSION_OPTION_COUNT; s++) {
         Rectangle sr = { cx, topY + 30 + s * 52.0f, leftW, 44 };
         bool chk = slotChecked[s];
         bool hover = MouseOver(sr);
         DrawCard(sr, chk ? COL_PRIMARY_LT : WHITE, chk ? COL_PRIMARY : COL_BORDER, 12.0f);
 
-        DrawTextFit(slots[s], PX(sr.x + 16), PX(sr.y + 14), 15, PX(leftW - 60), chk ? COL_NAVY : COL_TEXT);
+        DrawTextFit(SESSION_OPTIONS[s], PX(sr.x + 16), PX(sr.y + 14), 15, PX(leftW - 60), chk ? COL_NAVY : COL_TEXT);
 
         /* Checkbox di kanan */
         Rectangle cb = { sr.x + sr.width - 36, sr.y + 11, 22, 22 };
@@ -1182,8 +1190,8 @@ static void DrawScheduleScreen(void)
     Rectangle matchCard = { rx, topY + 30, rightW, 252 };
     DrawCard(matchCard, WHITE, COL_BORDER, 16.0f);
 
-    char schedTitle[80];
-    snprintf(schedTitle, sizeof schedTitle, "Hari %s, %s Okt  |  Fokus: %s", days[selectedDayIdx], dates[selectedDayIdx], currentUserCourse);
+    char schedTitle[96];
+    snprintf(schedTitle, sizeof schedTitle, "Hari %s  |  Fokus: %s", DAY_OPTIONS[selectedDayIdx], currentUserCourse);
     DrawTextBold(schedTitle, PX(matchCard.x + 18), PX(matchCard.y + 18), 14, PX(rightW - 36), COL_PRIMARY);
 
     int matched = 0;
@@ -1197,12 +1205,19 @@ static void DrawScheduleScreen(void)
     }
 
     if (Button((Rectangle){ matchCard.x + 18, matchCard.y + 196, rightW - 36, 40 }, "Simpan & Cocokkan Jadwal", true, COL_PRIMARY)) {
-        snprintf(currentUserSched, sizeof currentUserSched, "%s, %s Okt (Matched)", days[selectedDayIdx], dates[selectedDayIdx]);
+        int chosenSlot = 0;
+        for (int s = 0; s < SESSION_OPTION_COUNT; s++) {
+            if (slotChecked[s]) { chosenSlot = s; break; }
+        }
+
+        snprintf(currentUserSched, sizeof currentUserSched, "%s, %s",
+                 DAY_OPTIONS[selectedDayIdx], SESSION_OPTIONS[chosenSlot]);
+
         if (loggedBuddyIdx >= 0 && loggedBuddyIdx < buddyCount) {
             snprintf(buddies[loggedBuddyIdx].hari, sizeof buddies[loggedBuddyIdx].hari, "%s", currentUserSched);
             Persist();
         }
-        SetStatus("Jadwal belajar berhasil dicocokkan & disimpan!", COL_OK);
+        SetStatus("Jadwal belajar berhasil diperbarui & disimpan!", COL_OK);
     }
 }
 
@@ -1541,8 +1556,8 @@ void GuiInit(void)
     focusId = -1;
     SeedInitialChat();
 
-    fontRegular = LoadFontEx("C:\\Windows\\Fonts\\segoeui.ttf",  36, 0, 250);
-    fontBold    = LoadFontEx("C:\\Windows\\Fonts\\segoeuib.ttf", 36, 0, 250);
+    fontRegular = LoadFontEx("C:\\Windows\\Fonts\\segoeui.ttf",  64, 0, 250);
+    fontBold    = LoadFontEx("C:\\Windows\\Fonts\\segoeuib.ttf", 64, 0, 250);
 
     if (fontRegular.texture.id > 0) SetTextureFilter(fontRegular.texture, TEXTURE_FILTER_BILINEAR);
     if (fontBold.texture.id > 0)    SetTextureFilter(fontBold.texture,    TEXTURE_FILTER_BILINEAR);

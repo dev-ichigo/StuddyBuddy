@@ -1,11 +1,12 @@
 # StudyBuddy Campus Match data file - edited automatically
-B|Aulia Rahma|2410512001|Pemrograman C|Senin 14:00
-B|Bima Pratama|2410512015|Basis Data|Selasa 10:00
-B|Citra Lestari|2410512022|Pemrograman C|Rabu 13:00
-B|Dimas Saputra|2410512030|Logika Matematika|Kamis 15:00
-B|Eka Putri|2410512041|Sistem Informasi|Jumat 09:00
-B|Fajar Nugroho|2410512047|Basis Data|Senin 16:00
-B|Ferdigo Achda Gamis|2610512113|Pemrograman C|08.00
+B|Aulia Rahma|2410512001|Pemrograman C|Senin, 13.00 - 15.00
+B|Bima Pratama|2410512015|Basis Data|Selasa, 10.00 - 12.00
+B|Citra Lestari|2410512022|Pemrograman C|Rabu, 13.00 - 15.00
+B|Dimas Saputra|2410512030|Logika Matematika|Kamis, 15.00 - 17.00
+B|Eka Putri|2410512041|Sistem Informasi|Jumat, 08.00 - 10.00
+B|Fajar Nugroho|2410512047|Basis Data|Senin, 15.00 - 17.00
+B|Ferdigo Achda Gamis|2610512113|Pemrograman C|Senin, 08.00 - 10.00
+B|Fathir Bentala Rasheed|2610512114|Pemrograman C|Rabu, 13.00 - 15.00
 G|C Warriors|Pemrograman C|2|5|Aulia Rahma;Citra Lestari
 G|Data Wizards|Basis Data|2|5|Bima Pratama;Fajar Nugroho
 G|Grup Pemrograman C|Pemrograman C|1|5|Ferdigo Achda Gamis
