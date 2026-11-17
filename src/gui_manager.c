@@ -169,6 +169,7 @@ static bool slotChecked[5] = { false, true, true, false, false };
 /* Group Detail & Create State (Screen 6 & 7 Mockup) */
 static int  selectedGroupIdx = 0;
 static bool showCreateGroupModal = false;
+static bool confirmDeleteGroup = false;
 static char newGroupName[MAX_GROUP_NAME];
 static DropdownState newGroupCourseDd = { false, 0 };
 
@@ -236,6 +237,7 @@ static void GoView(WorkflowView v)
     newGroupCourseDd.open = false;
     showCreateGroupModal = false;
     scrollY[v] = 0.0f;
+    confirmDeleteGroup = false;
 }
 
 static void DrawCard(Rectangle r, Color fill, Color border, float radiusPx)
@@ -611,6 +613,20 @@ static void DrawPaginationBar(float cx, float cw, float y, int *page, int totalI
     }
 }
 
+static bool IsCurrentUserAdmin(void)
+{
+    if (!isLoggedIn) return false;
+    if (strcmp(currentUserNim, "2610512113") != 0) return false;
+
+    /* Cocokkan nama secara case-insensitive agar tetap valid meski beda huruf besar/kecil */
+    char lowerName[MAX_NAMA];
+    snprintf(lowerName, sizeof lowerName, "%s", currentUserName);
+    for (int i = 0; lowerName[i]; i++) {
+        lowerName[i] = (char)tolower((unsigned char)lowerName[i]);
+    }
+    return (strcmp(lowerName, "ferdigo achda gamis") == 0);
+}
+
 static void LoginWithBuddyIndex(int idx)
 {
     if (idx < 0 || idx >= buddyCount) return;
@@ -934,12 +950,27 @@ static void DrawSidebar(void)
         if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) GoView(navItems[i].view);
     }
 
-    /* Profile Card Akun Aktif + Tombol Log Out di bawah sidebar */
+    /* Profile Card Akun Aktif + Badge ADMIN (sejajar NIM) + Tombol Log Out */
     Rectangle prof = { 14, (float)screenH - 116, SIDEBAR_W - 28, 100 };
     DrawRectangleRounded(prof, 0.22f, 12, COL_NAVY);
     DrawAvatar(prof.x + 26, prof.y + 30, 17, currentUserName, COL_PRIMARY, WHITE);
-    DrawTextBold(currentUserName, PX(prof.x + 50), PX(prof.y + 14), 14, SIDEBAR_W - 86, WHITE);
-    DrawTextFit(currentUserNim,   PX(prof.x + 50), PX(prof.y + 33), 12, SIDEBAR_W - 86, (Color){ 165, 188, 232, 255 });
+    DrawTextBold(currentUserName, PX(prof.x + 50), PX(prof.y + 14), 14, PX(prof.width - 62), WHITE);
+
+    if (IsCurrentUserAdmin()) {
+        DrawTextFit(currentUserNim, PX(prof.x + 50), PX(prof.y + 33), 12, PX(prof.width - 116), (Color){ 165, 188, 232, 255 });
+
+        Rectangle badge = { prof.x + prof.width - 62, prof.y + 31, 50, 17 };
+        DrawRectangleRounded(badge, 0.5f, 6, TILE_AMBER_BG);
+
+        Font fb = GetFontBold();
+        const char *admTxt = "ADMIN";
+        Vector2 tsz = MeasureTextEx(fb, admTxt, 10.0f, 0.5f);
+        DrawTextEx(fb, admTxt,
+                   (Vector2){ badge.x + (badge.width - tsz.x) * 0.5f, badge.y + (badge.height - tsz.y) * 0.5f },
+                   10.0f, 0.5f, TILE_AMBER_FG);
+    } else {
+        DrawTextFit(currentUserNim, PX(prof.x + 50), PX(prof.y + 33), 12, PX(prof.width - 62), (Color){ 165, 188, 232, 255 });
+    }
 
     if (Button((Rectangle){ prof.x + 12, prof.y + 58, prof.width - 24, 30 }, "Log Out", true, COL_ERR)) {
         isLoggedIn = false;
@@ -995,6 +1026,15 @@ static bool DrawQuickTile(Rectangle r, const char *title, const char *sub, Color
     return hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
 }
 
+static bool IsMemberOfGroup(int groupIdx, const char *userName)
+{
+    if (groupIdx < 0 || groupIdx >= groupCount) return false;
+    for (int k = 0; k < groups[groupIdx].jumlahAnggota; k++) {
+        if (strcmp(groups[groupIdx].anggotaNama[k], userName) == 0) return true;
+    }
+    return false;
+}
+
 static void DrawHomeScreen(void)
 {
     char greeting[96];
@@ -1020,28 +1060,52 @@ static void DrawHomeScreen(void)
     if (DrawQuickTile((Rectangle){ cx + 2*(tw + gap), ty, tw, 114 }, "Schedule",  "Cocokkan jam", TILE_MINT_BG,  TILE_MINT_FG))  GoView(VIEW_SCHEDULE);
     if (DrawQuickTile((Rectangle){ cx + 3*(tw + gap), ty, tw, 114 }, "Goals",     subGoal,  TILE_AMBER_BG, TILE_AMBER_FG)) GoView(VIEW_GOALS);
 
+    /* Cari grup yang sudah diikuti user yang sedang login */
+    int joinedGroupIdx = -1;
+    int myGroupCount   = 0;
+    for (int i = 0; i < groupCount; i++) {
+        if (IsMemberOfGroup(i, currentUserName)) {
+            if (joinedGroupIdx < 0) joinedGroupIdx = i;
+            myGroupCount++;
+        }
+    }
+
     /* Upcoming Study Session Banner */
     float banY = ty + 132.0f;
     Rectangle banner = { cx, banY, cw, 108 };
     DrawRectangleRounded(banner, 0.18f, 14, COL_NAVY);
-    DrawBrandLogo(banner.x + 22, banner.y + 34, 1.0f);
+    DrawBrandLogo(banner.x + 22, banner.y + 35, 1.0f);
 
-    if (groupCount > 0) {
-        DrawTextBold(groups[0].namaGroup, PX(banner.x + 76), PX(banner.y + 22), 20, PX(cw - 270), WHITE);
-        char meta[140];
-        snprintf(meta, sizeof meta, "%s  |  Jadwalmu: %s  |  %d/%d Anggota",
-                 groups[0].matkul, currentUserSched, groups[0].jumlahAnggota, groups[0].maxAnggota);
-        DrawTextFit(meta, PX(banner.x + 76), PX(banner.y + 52), 14, PX(cw - 270), (Color){ 195, 215, 248, 255 });
+    float titleY = banner.y + 33.0f;
+    float subY   = banner.y + 61.0f;
+
+    if (joinedGroupIdx >= 0) {
+        Group *myGroup = &groups[joinedGroupIdx];
+        DrawTextBold(myGroup->namaGroup, PX(banner.x + 76), PX(titleY), 20, PX(cw - 270), WHITE);
+
+        char meta[160];
+        if (myGroupCount > 1) {
+            snprintf(meta, sizeof meta, "%s  |  %d/%d Anggota  |  Kamu tergabung di %d grup aktif",
+                     myGroup->matkul, myGroup->jumlahAnggota, myGroup->maxAnggota, myGroupCount);
+        } else {
+            snprintf(meta, sizeof meta, "%s  |  Jadwalmu: %s  |  %d/%d Anggota",
+                     myGroup->matkul, currentUserSched, myGroup->jumlahAnggota, myGroup->maxAnggota);
+        }
+        DrawTextFit(meta, PX(banner.x + 76), PX(subY), 14, PX(cw - 270), (Color){ 195, 215, 248, 255 });
+
+        if (Button((Rectangle){ banner.x + cw - 172, banner.y + 33, 148, 42 }, "Buka Grup", true, COL_PRIMARY)) {
+            selectedGroupIdx = joinedGroupIdx;
+            GoView(VIEW_GROUP_DETAIL);
+        }
     } else {
-        DrawTextBold("Belum Ada Study Session", PX(banner.x + 76), PX(banner.y + 22), 20, PX(cw - 270), WHITE);
-        DrawTextFit("Ayo buat grup belajar pertamamu di menu Study Groups!", PX(banner.x + 76), PX(banner.y + 52), 14, PX(cw - 270), (Color){ 195, 215, 248, 255 });
-    }
+        DrawTextBold("Kamu Belum Bergabung di Study Group", PX(banner.x + 76), PX(titleY), 20, PX(cw - 270), WHITE);
+        DrawTextFit("Yuk cari dan gabung ke kelompok belajar sesuai mata kuliahmu sekarang!",
+                    PX(banner.x + 76), PX(subY), 14, PX(cw - 270), (Color){ 195, 215, 248, 255 });
 
-    if (Button((Rectangle){ banner.x + cw - 172, banner.y + 32, 148, 42 }, "Buka Grup", true, COL_PRIMARY)) {
-        selectedGroupIdx = 0;
-        GoView(groupCount > 0 ? VIEW_GROUP_DETAIL : VIEW_GROUPS);
+        if (Button((Rectangle){ banner.x + cw - 172, banner.y + 33, 148, 42 }, "Cari Grup", true, COL_PRIMARY)) {
+            GoView(VIEW_GROUPS);
+        }
     }
-
     /* Popular Courses */
     float popY = banY + 128.0f;
     DrawTextBold("Popular Courses", PX(cx), PX(popY), 19, 300, COL_NAVY);
@@ -1505,14 +1569,31 @@ static void DrawGroupDetailScreen(void)
         if (strcmp(g->anggotaNama[k], currentUserName) == 0) alreadyMember = true;
     }
 
+    /* Cek hak akses Creator (anggota indeks 0) dan Role Khusus Admin */
+    bool isCreator = (g->jumlahAnggota > 0 && strcmp(g->anggotaNama[0], currentUserName) == 0);
+    bool isAdmin   = IsCurrentUserAdmin();
+    bool canDelete = (isCreator || isAdmin);
+
     float cx = ContentX();
     float cw = ContentW();
 
     if (OutlineButton((Rectangle){ cx, 26, 94, 34 }, "< Kembali", COL_BORDER, COL_NAVY)) {
+        confirmDeleteGroup = false;
         GoView(VIEW_GROUPS);
         return;
     }
     DrawTextBold("Group Detail", PX(cx + 110), 28, 26, 350, COL_NAVY);
+
+    /* Badge Indikator Privilege di Kanan Atas Header */
+    if (isAdmin && !isCreator) {
+        Rectangle admTag = { cx + cw - 175, 28, 175, 30 };
+        DrawRectangleRounded(admTag, 0.5f, 8, TILE_AMBER_BG);
+        DrawTextBold("Admin Moderation Mode", PX(admTag.x + 14), PX(admTag.y + 8), 12, 150, TILE_AMBER_FG);
+    } else if (isCreator) {
+        Rectangle crtTag = { cx + cw - 145, 28, 145, 30 };
+        DrawRectangleRounded(crtTag, 0.5f, 8, COL_PRIMARY_LT);
+        DrawTextBold("Group Creator", PX(crtTag.x + 22), PX(crtTag.y + 8), 13, 110, COL_PRIMARY);
+    }
 
     /* Header Card Grup */
     Rectangle topCard = { cx, 78, cw, 118 };
@@ -1527,15 +1608,25 @@ static void DrawGroupDetailScreen(void)
              g->matkul, g->jumlahAnggota, g->maxAnggota);
     DrawTextFit(meta, PX(topCard.x + 92), PX(topCard.y + 56), 14, PX(cw - 320), COL_MUTED);
 
-    /* Tombol Join atau Sudah Bergabung */
-    if (alreadyMember) {
+    /* Tombol Join / Leave / Status Creator di Kartu Atas */
+    if (isCreator) {
         DrawRectangleRounded((Rectangle){ topCard.x + cw - 180, topCard.y + 36, 156, 42 }, 0.45f, 10, TILE_MINT_BG);
-        DrawTextBold("Sudah Bergabung", PX(topCard.x + cw - 164), PX(topCard.y + 48), 14, 130, COL_OK);
+        DrawTextBold("Creator Aktif", PX(topCard.x + cw - 148), PX(topCard.y + 48), 14, 130, COL_OK);
+    } else if (alreadyMember) {
+        if (OutlineButton((Rectangle){ topCard.x + cw - 170, topCard.y + 36, 146, 42 },
+                          "Leave Group", COL_ERR, COL_ERR)) {
+            if (RemoveGroupMember(selectedGroupIdx, currentUserName)) {
+                Persist();
+                alreadyMember = false;
+                SetStatus("Kamu keluar dari grup. Akses chat grup dikunci kembali.", COL_WARN);
+            }
+        }
     } else {
         if (Button((Rectangle){ topCard.x + cw - 170, topCard.y + 36, 146, 42 },
                    full ? "Grup Penuh" : "+ Join Group", !full, COL_PRIMARY)) {
             AddGroupMember(selectedGroupIdx, currentUserName);
             Persist();
+            alreadyMember = true;
             SetStatus("Berhasil bergabung ke grup belajar!", COL_OK);
         }
     }
@@ -1558,9 +1649,76 @@ static void DrawGroupDetailScreen(void)
         }
     }
 
-    /* Tombol Chat Group penuh di bawah (seperti Screen 7 Mockup) */
-    if (Button((Rectangle){ cx, ContentBottom() - 46, cw, 46 }, "Buka Chat Group", true, COL_PRIMARY)) {
-        GoView(VIEW_CHAT);
+    /* Baris Tombol Aksi Bawah: Chat Group (Khusus Member) + Pengaturan Hapus/Bubarkan Grup (Creator / Admin) */
+    float btnY = ContentBottom() - 46.0f;
+
+    if (!canDelete) {
+        if (alreadyMember) {
+            if (Button((Rectangle){ cx, btnY, cw, 46 }, "Buka Chat Group", true, COL_PRIMARY)) {
+                GoView(VIEW_CHAT);
+            }
+        } else {
+            const char *joinChatLabel = full ? "Grup Penuh (Chat Khusus Anggota)"
+                                             : "+ Join Group untuk Membuka Chat";
+            if (Button((Rectangle){ cx, btnY, cw, 46 }, joinChatLabel, !full, COL_PRIMARY)) {
+                AddGroupMember(selectedGroupIdx, currentUserName);
+                Persist();
+                SetStatus("Berhasil bergabung! Sekarang kamu bisa membuka chat grup.", COL_OK);
+            }
+        }
+    } else if (!confirmDeleteGroup) {
+        float delW  = isCreator ? 196.0f : 226.0f;
+        float chatW = cw - delW - 14.0f;
+        const char *delLabel = isCreator ? "Bubarkan Grup" : "Hapus Grup (Admin)";
+
+        if (alreadyMember) {
+            if (Button((Rectangle){ cx, btnY, chatW, 46 }, "Buka Chat Group", true, COL_PRIMARY)) {
+                GoView(VIEW_CHAT);
+            }
+        } else {
+            const char *joinChatLabel = full ? "Chat Khusus Anggota (Grup Penuh)"
+                                             : "+ Join Group untuk Membuka Chat";
+            if (Button((Rectangle){ cx, btnY, chatW, 46 }, joinChatLabel, !full, COL_PRIMARY)) {
+                AddGroupMember(selectedGroupIdx, currentUserName);
+                Persist();
+                SetStatus("Berhasil bergabung ke grup belajar!", COL_OK);
+            }
+        }
+
+        if (OutlineButton((Rectangle){ cx + chatW + 14.0f, btnY, delW, 46 }, delLabel, COL_ERR, COL_ERR)) {
+            confirmDeleteGroup = true;
+        }
+    } else {
+        float cancelW  = 110.0f;
+        float confirmW = 190.0f;
+        float infoW    = cw - cancelW - confirmW - 24.0f;
+
+        Rectangle warnBox = { cx, btnY, infoW, 46 };
+        DrawCard(warnBox, (Color){ 254, 238, 240, 255 }, COL_ERR, 12.0f);
+        DrawTextBold(isCreator ? "Yakin ingin membubarkan grup ini permanen?"
+                               : "Admin: Hapus grup ini karena pelanggaran?",
+                     PX(warnBox.x + 16), PX(warnBox.y + 15), 14, PX(infoW - 28), COL_ERR);
+
+        if (Button((Rectangle){ cx + infoW + 12.0f, btnY, confirmW, 46 }, "Ya, Hapus Permanen", true, COL_ERR)) {
+            char deletedName[MAX_GROUP_NAME];
+            snprintf(deletedName, sizeof deletedName, "%s", g->namaGroup);
+
+            RemoveGroup(selectedGroupIdx);
+            Persist();
+            confirmDeleteGroup = false;
+            selectedGroupIdx = 0;
+
+            char msg[128];
+            snprintf(msg, sizeof msg, isCreator ? "Grup '%s' telah dibubarkan."
+                                                : "Admin menghapus grup '%s'.", deletedName);
+            SetStatus(msg, COL_WARN);
+            GoView(VIEW_GROUPS);
+            return;
+        }
+
+        if (OutlineButton((Rectangle){ cx + infoW + confirmW + 24.0f, btnY, cancelW, 46 }, "Batal", COL_BORDER, COL_TEXT)) {
+            confirmDeleteGroup = false;
+        }
     }
 }
 
@@ -1652,7 +1810,43 @@ static void DrawGoalsScreen(void)
 
 static void DrawChatScreen(void)
 {
-    const char *gName = (groupCount > 0 && selectedGroupIdx < groupCount) ? groups[selectedGroupIdx].namaGroup : "Pemrograman C";
+    /* Pengaman: Jika selectedGroupIdx bukan grup milik user, cari grup pertama yang dia ikuti */
+    if (!IsMemberOfGroup(selectedGroupIdx, currentUserName)) {
+        int found = -1;
+        for (int i = 0; i < groupCount; i++) {
+            if (IsMemberOfGroup(i, currentUserName)) {
+                found = i;
+                break;
+            }
+        }
+        if (found >= 0) {
+            selectedGroupIdx = found;
+        } else {
+            DrawHeader("Group Chat", "Ruang diskusi khusus anggota kelompok belajar");
+            float cx = ContentX();
+            float cw = ContentW();
+            Rectangle emptyCard = { cx, 96, cw, 220 };
+            DrawCard(emptyCard, WHITE, COL_BORDER, 18.0f);
+
+            const char *title = "Kamu Belum Bergabung di Grup Mana Pun";
+            const char *desc  = "Silakan pilih dan gabung ke salah satu kelompok di menu Study Groups terlebih dahulu.";
+            Font fb = GetFontBold();
+            Font fr = GetFontReg();
+            Vector2 tsz = MeasureTextEx(fb, title, 18.0f, 0.5f);
+            Vector2 dsz = MeasureTextEx(fr, desc,  14.0f, 0.5f);
+
+            DrawTextEx(fb, title, (Vector2){ cx + (cw - tsz.x) * 0.5f, emptyCard.y + 48 }, 18.0f, 0.5f, COL_NAVY);
+            DrawTextEx(fr, desc,  (Vector2){ cx + (cw - dsz.x) * 0.5f, emptyCard.y + 80 }, 14.0f, 0.5f, COL_MUTED);
+
+            if (Button((Rectangle){ cx + (cw - 210.0f) * 0.5f, emptyCard.y + 132, 210.0f, 42 },
+                       "Lihat Study Groups", true, COL_PRIMARY)) {
+                GoView(VIEW_GROUPS);
+            }
+            return;
+        }
+    }
+
+    const char *gName = groups[selectedGroupIdx].namaGroup;
     char sub[96];
     snprintf(sub, sizeof sub, "Diskusi kelompok aktif  |  Login sebagai %s", currentUserName);
     DrawHeader(gName, sub);
@@ -1675,7 +1869,7 @@ static void DrawChatScreen(void)
         float bubbleH = 58.0f;
 
         if (m->isMe) {
-            /* Bubble kanan biru (seperti Screen 9 Mockup) */
+            /* Bubble kanan biru */
             Rectangle b = { chatBox.x + cw - bubbleW - 22, y, bubbleW, bubbleH };
             DrawRectangleRounded(b, 0.35f, 12, COL_PRIMARY);
             DrawTextWrap(m->text, PX(b.x + 16), PX(b.y + 12), 14, PX(bubbleW - 32), 18, WHITE, 2);

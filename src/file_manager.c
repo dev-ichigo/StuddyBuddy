@@ -150,6 +150,35 @@ int AddGroupMember(int groupIndex, const char *name)
     return 1;
 }
 
+int RemoveGroup(int groupIndex)
+{
+    if (groupIndex < 0 || groupIndex >= groupCount) return 0;
+    for (int i = groupIndex; i < groupCount - 1; i++) {
+        groups[i] = groups[i + 1];
+    }
+    groupCount--;
+    return 1;
+}
+
+int RemoveGroupMember(int groupIndex, const char *memberName)
+{
+    if (groupIndex < 0 || groupIndex >= groupCount || !memberName) return 0;
+    Group *g = &groups[groupIndex];
+
+    /* Indeks 0 adalah Creator, member biasa berada di indeks >= 1 */
+    for (int k = 1; k < g->jumlahAnggota; k++) {
+        if (strcmp(g->anggotaNama[k], memberName) == 0) {
+            for (int j = k; j < g->jumlahAnggota - 1; j++) {
+                snprintf(g->anggotaNama[j], MAX_NAMA, "%s", g->anggotaNama[j + 1]);
+            }
+            g->anggotaNama[g->jumlahAnggota - 1][0] = '\0';
+            g->jumlahAnggota--;
+            return 1;
+        }
+    }
+    return 0;
+}
+
 void CreateSampleData(void)
 {
     static const char *sample[][4] = {

@@ -20,6 +20,8 @@ int         AddGoal(const Goal *g);
 
 /* Adds a member to an existing group. Returns 1 on success, 0 if full/invalid. */
 int         AddGroupMember(int groupIndex, const char *name);
+int         RemoveGroup(int groupIndex);
+int         RemoveGroupMember(int groupIndex, const char *memberName);
 
 /* Trims text and replaces characters that would break the file format. */
 void        SanitizeText(char *s);

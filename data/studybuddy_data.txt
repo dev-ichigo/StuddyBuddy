@@ -8,7 +8,7 @@ B|Fajar Nugroho|2410512047|Basis Data|Senin, 15.00 - 17.00
 B|Ferdigo Achda Gamis|2610512113|Pemrograman C|Senin, 08.00 - 10.00, 13.00 - 15.00
 B|Fathir Bentala Rasheed|2610512114|Pemrograman C|Rabu, 13.00 - 15.00
 G|C Warriors|Pemrograman C|2|5|Aulia Rahma;Citra Lestari
-G|Data Wizards|Basis Data|2|5|Bima Pratama;Fajar Nugroho
+G|Data Wizards|Basis Data|3|5|Bima Pratama;Fajar Nugroho;Fathir Bentala Rasheed
 G|Grup Pemrograman C|Pemrograman C|1|5|Ferdigo Achda Gamis
 G|Test 123|Pemrograman C|1|5|Ferdigo Achda Gamis
 G|Test 321|Pemrograman C|1|5|Ferdigo Achda Gamis
