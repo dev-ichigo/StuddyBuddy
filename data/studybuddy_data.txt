@@ -10,6 +10,8 @@ B|Fathir Bentala Rasheed|2610512114|Pemrograman C|Rabu, 13.00 - 15.00
 G|C Warriors|Pemrograman C|2|5|Aulia Rahma;Citra Lestari
 G|Data Wizards|Basis Data|2|5|Bima Pratama;Fajar Nugroho
 G|Grup Pemrograman C|Pemrograman C|1|5|Ferdigo Achda Gamis
+G|Test 123|Pemrograman C|1|5|Ferdigo Achda Gamis
+G|Test 321|Pemrograman C|1|5|Ferdigo Achda Gamis
 T|0|Mastering Pointer & Memory Management in C
 T|0|Menyelesaikan latihan normalisasi Basis Data
 T|1|Memahami tabel kebenaran & logika proposisi
