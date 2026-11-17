@@ -10,6 +10,7 @@
 #define MAX_GROUP_MEMBERS  5
 #define MAX_GOAL_DESC      100
 #define COURSE_COUNT       4
+#define MAX_GOALS          1000
 
 /* ---------- Data models (PRD section 7.1) ---------- */
 typedef struct {
@@ -28,8 +29,9 @@ typedef struct {
 } Group;
 
 typedef struct {
+    char nimPemilik[MAX_NIM];
     char deskripsi[MAX_GOAL_DESC];
-    int  status;            /* 0: On Progress, 1: Selesai */
+    int  status; /* 0 = On Progress, 1 = Completed */
 } Goal;
 
 /* ---------- Global state (defined in main.c) ----------

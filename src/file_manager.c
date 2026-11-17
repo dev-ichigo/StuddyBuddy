@@ -138,6 +138,16 @@ int AddGoal(const Goal *g)
     return goalCount++;
 }
 
+int RemoveGoal(int goalIndex)
+{
+    if (goalIndex < 0 || goalIndex >= goalCount) return 0;
+    for (int i = goalIndex; i < goalCount - 1; i++) {
+        goals[i] = goals[i + 1];
+    }
+    goalCount--;
+    return 1;
+}
+
 int AddGroupMember(int groupIndex, const char *name)
 {
     if (groupIndex < 0 || groupIndex >= groupCount) return 0;
@@ -241,7 +251,7 @@ int SaveData(void)
     }
 
     for (int i = 0; i < goalCount; i++) {
-        fprintf(f, "T|%d|%s\n", goals[i].status, goals[i].deskripsi);
+        fprintf(f, "T|%s|%d|%s\n", goals[i].nimPemilik, goals[i].status, goals[i].deskripsi);
     }
 
     return fclose(f) == 0;
@@ -289,11 +299,20 @@ int LoadData(void)
             if (g.maxAnggota < 1)                 g.maxAnggota = 1;
             if (AddGroup(&g) >= 0) loaded++;
 
-        } else if (strcmp(fld[0], "T") == 0 && n >= 3) {
+        } else if (strcmp(fld[0], "T") == 0 && n >= 4) {
             Goal g;
             memset(&g, 0, sizeof g);
+            snprintf(g.nimPemilik, sizeof g.nimPemilik, "%s", fld[1]);
+            g.status = (atoi(fld[2]) == 1) ? 1 : 0;
+            snprintf(g.deskripsi,  sizeof g.deskripsi,  "%s", fld[3]);
+            if (AddGoal(&g) >= 0) loaded++;
+
+        } else if (strcmp(fld[0], "T") == 0 && n == 3) {
+            Goal g;
+            memset(&g, 0, sizeof g);
+            snprintf(g.nimPemilik, sizeof g.nimPemilik, "2610512113");
             g.status = (atoi(fld[1]) == 1) ? 1 : 0;
-            snprintf(g.deskripsi, sizeof g.deskripsi, "%s", fld[2]);
+            snprintf(g.deskripsi,  sizeof g.deskripsi,  "%s", fld[2]);
             if (AddGoal(&g) >= 0) loaded++;
         }
     }

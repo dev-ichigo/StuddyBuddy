@@ -22,6 +22,7 @@
 
 #define MAX_CHAT_MSGS     60
 #define MAX_CHAT_LEN      180
+#define MAX_USER_GOALS    4
 /* Virtual canvas resolution (base design size) */
 #define VIRT_H 640.0f
 
@@ -1047,13 +1048,19 @@ static void DrawHomeScreen(void)
     float tw = (cw - 3 * gap) / 4.0f;
     float ty = 96.0f;
 
-    int doneGoals = 0;
-    for (int i = 0; i < goalCount; i++) if (goals[i].status == 1) doneGoals++;
+    int myTotalGoals = 0;
+    int myDoneGoals  = 0;
+    for (int i = 0; i < goalCount; i++) {
+        if (strcmp(goals[i].nimPemilik, currentUserNim) == 0) {
+            myTotalGoals++;
+            if (goals[i].status == 1) myDoneGoals++;
+        }
+    }
 
     char subBuddy[40], subGroup[40], subGoal[40];
     snprintf(subBuddy, sizeof subBuddy, "%d teman tersedia", buddyCount);
     snprintf(subGroup, sizeof subGroup, "%d grup aktif", groupCount);
-    snprintf(subGoal,  sizeof subGoal,  "%d/%d selesai", doneGoals, goalCount);
+    snprintf(subGoal,  sizeof subGoal,  "%d/%d selesai", myDoneGoals, myTotalGoals);
 
     if (DrawQuickTile((Rectangle){ cx, ty, tw, 114 }, "Find Buddy",  subBuddy, TILE_BLUE_BG,  TILE_BLUE_FG))  GoView(VIEW_FIND_BUDDY);
     if (DrawQuickTile((Rectangle){ cx + (tw + gap), ty, tw, 114 }, "My Groups",   subGroup, TILE_PINK_BG,  TILE_PINK_FG))  GoView(VIEW_GROUPS);
@@ -1106,6 +1113,7 @@ static void DrawHomeScreen(void)
             GoView(VIEW_GROUPS);
         }
     }
+
     /* Popular Courses */
     float popY = banY + 128.0f;
     DrawTextBold("Popular Courses", PX(cx), PX(popY), 19, 300, COL_NAVY);
@@ -1728,59 +1736,89 @@ static void DrawGroupDetailScreen(void)
 
 static void DrawGoalsScreen(void)
 {
-    DrawHeader("Learning Goals", "Pantau progres target belajarmu bersama kelompok");
+    DrawHeader("Learning Goals", "Pantau dan kelola maksimal 4 target belajarmu sendiri");
 
     float cx = ContentX();
     float cw = ContentW();
 
-    int done = 0;
-    for (int i = 0; i < goalCount; i++) if (goals[i].status == 1) done++;
+    int myTotal = 0;
+    int myDone  = 0;
+    for (int i = 0; i < goalCount; i++) {
+        if (strcmp(goals[i].nimPemilik, currentUserNim) == 0) {
+            myTotal++;
+            if (goals[i].status == 1) myDone++;
+        }
+    }
 
-    /* Progress Summary Card di atas (seperti "My Goals 1/3" di Screen 8 Mockup) */
+    bool isFull = (myTotal >= MAX_USER_GOALS);
+
+    /* Progress Summary Card */
     Rectangle progCard = { cx, 94, cw, 82 };
     DrawCard(progCard, WHITE, COL_BORDER, 16.0f);
     DrawTextBold("My Goals Progress", PX(progCard.x + 20), PX(progCard.y + 16), 16, 250, COL_NAVY);
 
-    char statStr[32];
-    snprintf(statStr, sizeof statStr, "%d / %d Selesai", done, goalCount);
-    DrawTextBold(statStr, PX(progCard.x + cw - 130), PX(progCard.y + 16), 15, 110, COL_OK);
+    char statStr[40];
+    snprintf(statStr, sizeof statStr, "%d / %d Selesai (Max %d)", myDone, myTotal, MAX_USER_GOALS);
+    DrawTextBold(statStr, PX(progCard.x + cw - 195), PX(progCard.y + 16), 15, 175, COL_OK);
 
     Rectangle bar = { progCard.x + 20, progCard.y + 48, cw - 40, 12 };
     DrawRectangleRounded(bar, 1.0f, 8, COL_PRIMARY_LT);
-    float ratio = (goalCount > 0) ? (float)done / (float)goalCount : 0.0f;
+    float ratio = (myTotal > 0) ? (float)myDone / (float)myTotal : 0.0f;
     if (ratio > 0.0f) {
         DrawRectangleRounded((Rectangle){ bar.x, bar.y, bar.width * ratio, bar.height }, 1.0f, 8, COL_OK);
     }
 
-    /* Input Tambah Goal */
+    /* Input Tambah Goal Baru (Maksimal 4 per user) */
     bool enter = TextInput(ID_GOAL_INPUT, (Rectangle){ cx, 190, cw - 166, 44 },
-                           goalInput, MAX_GOAL_DESC, "Tambahkan target belajar baru...", false);
+                           goalInput, MAX_GOAL_DESC,
+                           isFull ? "Batas maksimal 4 target belajar tercapai..." : "Tambahkan target belajar baru...",
+                           false);
 
-    if (Button((Rectangle){ cx + cw - 152, 190, 152, 44 }, "+ Add Goal", true, COL_PRIMARY) || enter) {
-        Goal g;
-        memset(&g, 0, sizeof g);
-        snprintf(g.deskripsi, sizeof g.deskripsi, "%s", goalInput);
-        SanitizeText(g.deskripsi);
+    if (Button((Rectangle){ cx + cw - 152, 190, 152, 44 },
+               isFull ? "Max 4 Goals" : "+ Add Goal", !isFull, COL_PRIMARY) || enter) {
+        if (isFull) {
+            SetStatus("Maksimal 4 target belajar! Hapus salah satu untuk menambah baru.", COL_WARN);
+        } else {
+            Goal g;
+            memset(&g, 0, sizeof g);
+            snprintf(g.nimPemilik, sizeof g.nimPemilik, "%s", currentUserNim);
+            snprintf(g.deskripsi,  sizeof g.deskripsi,  "%s", goalInput);
+            g.status = 0;
+            SanitizeText(g.deskripsi);
 
-        if (g.deskripsi[0] == '\0') {
-            SetStatus("Deskripsi target belajar tidak boleh kosong.", COL_ERR);
-        } else if (AddGoal(&g) >= 0) {
-            goalInput[0] = '\0';
-            Persist();
-            SetStatus("Target belajar ditambahkan!", COL_OK);
+            if (g.deskripsi[0] == '\0') {
+                SetStatus("Deskripsi target belajar tidak boleh kosong.", COL_ERR);
+            } else if (AddGoal(&g) >= 0) {
+                goalInput[0] = '\0';
+                Persist();
+                SetStatus("Target belajar ditambahkan!", COL_OK);
+            } else {
+                SetStatus("Gagal menambahkan target belajar!", COL_ERR);
+            }
         }
     }
 
-    Rectangle area = { cx, 248.0f, cw, ContentBottom() - 248.0f };
-    float contentH = goalCount * GOAL_ROW_H;
-    ScrollUpdate(&scrollY[VIEW_GOALS], area, contentH);
+    if (myTotal == 0) {
+        Rectangle emptyCard = { cx, 254.0f, cw, 120.0f };
+        DrawCard(emptyCard, WHITE, COL_BORDER, 16.0f);
 
-    BeginClip(area);
-    for (int i = 0; i < goalCount; i++) {
-        float y = area.y + i * GOAL_ROW_H - scrollY[VIEW_GOALS];
-        if (y + GOAL_ROW_H < area.y || y > area.y + area.height) continue;
+        const char *msg = "Kamu belum memiliki target belajar. Tambahkan target pertamamu di atas!";
+        Font fr = GetFontReg();
+        Vector2 tsz = MeasureTextEx(fr, msg, 15.0f, 0.5f);
+        DrawTextEx(fr, msg,
+                   (Vector2){ emptyCard.x + (cw - tsz.x) * 0.5f, emptyCard.y + (emptyCard.height - tsz.y) * 0.5f },
+                   15.0f, 0.5f, COL_MUTED);
+        return;
+    }
 
-        Rectangle row = { area.x, y, area.width - 12, 70 };
+    int renderedIdx = 0;
+    for (int i = 0; i < goalCount && renderedIdx < MAX_USER_GOALS; i++) {
+        if (strcmp(goals[i].nimPemilik, currentUserNim) != 0) continue;
+
+        float y = 248.0f + renderedIdx * GOAL_ROW_H;
+        renderedIdx++;
+
+        Rectangle row = { cx, y, cw, 70 };
         bool isDone = (goals[i].status == 1);
         DrawCard(row, WHITE, COL_BORDER, 16.0f);
 
@@ -1791,19 +1829,26 @@ static void DrawGoalsScreen(void)
             DrawCircleLines(PX(row.x + 30), PX(y + 35), 12, COL_PRIMARY);
         }
 
-        DrawTextBold(goals[i].deskripsi, PX(row.x + 56), PX(y + 16), 16, PX(row.width - 220), COL_TEXT);
+        DrawTextBold(goals[i].deskripsi, PX(row.x + 56), PX(y + 16), 16, PX(row.width - 315), COL_TEXT);
         DrawTextFit(isDone ? "Completed" : "On Progress", PX(row.x + 56), PX(y + 40), 13, 180, isDone ? COL_OK : COL_WARN);
 
-        if (Button((Rectangle){ row.x + row.width - 138, y + 17, 122, 36 },
+        /* Tombol Selesai / Reopen */
+        if (Button((Rectangle){ row.x + row.width - 234, y + 17, 112, 36 },
                    isDone ? "Reopen" : "Selesai", true, isDone ? COL_MUTED : COL_PRIMARY)) {
             goals[i].status = isDone ? 0 : 1;
             Persist();
         }
-    }
-    EndClip();
-    DrawScrollbar(area, scrollY[VIEW_GOALS], contentH);
-}
 
+        /* Tombol Hapus Goal */
+        if (OutlineButton((Rectangle){ row.x + row.width - 112, y + 17, 96, 36 },
+                          "Hapus", COL_ERR, COL_ERR)) {
+            RemoveGoal(i);
+            Persist();
+            SetStatus("Target belajar berhasil dihapus.", COL_WARN);
+            break;
+        }
+    }
+}
 /* ====================================================================== */
 /* SCREEN 9: Group Chat (Mockup Screen 9)                                 */
 /* ====================================================================== */
