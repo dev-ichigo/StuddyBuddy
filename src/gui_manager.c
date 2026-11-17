@@ -585,7 +585,7 @@ static void LoginWithBuddyIndex(int idx)
     snprintf(currentUserCourse, sizeof currentUserCourse, "%s", buddies[idx].matkul);
     snprintf(currentUserSched,  sizeof currentUserSched,  "%s", buddies[idx].hari);
 
-    /* Sinkronkan pilihan hari & slot jam di Match Schedule dengan jadwal akun user */
+    /* Sinkronkan pilihan hari & maksimal 2 slot jam di Match Schedule */
     selectedDayIdx = 0;
     for (int i = 0; i < 5; i++) slotChecked[i] = false;
 
@@ -596,14 +596,14 @@ static void LoginWithBuddyIndex(int idx)
         }
     }
 
-    bool foundSlot = false;
+    int countChecked = 0;
     for (int s = 0; s < SESSION_OPTION_COUNT && s < 5; s++) {
-        if (strstr(buddies[idx].hari, SESSION_OPTIONS[s]) != NULL) {
+        if (strstr(buddies[idx].hari, SESSION_OPTIONS[s]) != NULL && countChecked < 2) {
             slotChecked[s] = true;
-            foundSlot = true;
+            countChecked++;
         }
     }
-    if (!foundSlot) slotChecked[0] = true;
+    if (countChecked == 0) slotChecked[0] = true;
 }
 
 static void SeedInitialChat(void)
@@ -1140,12 +1140,12 @@ static void DrawFindBuddyScreen(void)
 
 static void DrawScheduleScreen(void)
 {
-    DrawHeader("Match Your Schedule", "Pilih hari dan jam kosongmu untuk mencocokkan jadwal teman");
+    DrawHeader("Match Your Schedule", "Pilih 1 hari dan maksimal 2 slot jam kosongmu untuk disimpan");
 
     float cx = ContentX();
     float cw = ContentW();
 
-    /* Baris Pemilih Hari (Senin - Minggu tanpa angka tanggal, merata penuh) */
+    /* Baris Pemilih Hari: Hanya bisa memilih 1 hari (Senin - Minggu) */
     float dayW = (cw - 6 * 10.0f) / 7.0f;
     for (int d = 0; d < DAY_OPTION_COUNT; d++) {
         Rectangle dr = { cx + d * (dayW + 10.0f), 96, dayW, 48 };
@@ -1161,29 +1161,54 @@ static void DrawScheduleScreen(void)
         if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) selectedDayIdx = d;
     }
 
-    /* Kolom Kiri: Pilihan Jam Kosong (sesuai SESSION_OPTIONS saat Sign Up) */
+    /* Hitung berapa slot jam yang sedang dipilih saat ini (maksimal 2) */
+    int checkedCount = 0;
+    int activeSlots[2] = { -1, -1 };
+    for (int i = 0; i < SESSION_OPTION_COUNT && i < 5; i++) {
+        if (slotChecked[i]) {
+            if (checkedCount < 2) activeSlots[checkedCount] = i;
+            checkedCount++;
+        }
+    }
+
+    /* Kolom Kiri: Pilihan Jam Kosong (Maksimal 2 slot) */
     float leftW = (cw - 20.0f) * 0.52f;
     float rightW = cw - leftW - 20.0f;
     float topY = 162.0f;
 
-    DrawTextBold("Pilih Slot Jam Kosongmu:", PX(cx), PX(topY), 16, 260, COL_NAVY);
+    char slotHeader[64];
+    snprintf(slotHeader, sizeof slotHeader, "Pilih Slot Jam Kosongmu (%d/2):", checkedCount);
+    DrawTextBold(slotHeader, PX(cx), PX(topY), 16, 300, COL_NAVY);
+
     for (int s = 0; s < SESSION_OPTION_COUNT; s++) {
         Rectangle sr = { cx, topY + 30 + s * 52.0f, leftW, 44 };
         bool chk = slotChecked[s];
-        bool hover = MouseOver(sr);
-        DrawCard(sr, chk ? COL_PRIMARY_LT : WHITE, chk ? COL_PRIMARY : COL_BORDER, 12.0f);
+        bool locked = (!chk && checkedCount >= 2);
+        bool hover = !locked && MouseOver(sr);
 
-        DrawTextFit(SESSION_OPTIONS[s], PX(sr.x + 16), PX(sr.y + 14), 15, PX(leftW - 60), chk ? COL_NAVY : COL_TEXT);
+        Color cardBg = chk ? COL_PRIMARY_LT : (locked ? (Color){ 240, 243, 248, 255 } : (hover ? COL_PRIMARY_LT : WHITE));
+        Color cardBd = chk ? COL_PRIMARY : COL_BORDER;
+        Color txtCol = chk ? COL_NAVY : (locked ? COL_DISABLED : COL_TEXT);
+
+        DrawCard(sr, cardBg, cardBd, 12.0f);
+        DrawTextFit(SESSION_OPTIONS[s], PX(sr.x + 16), PX(sr.y + 14), 15, PX(leftW - 95), txtCol);
+
+        if (locked) {
+            DrawTextFit("Locked", PX(sr.x + sr.width - 86), PX(sr.y + 15), 12, 50, COL_DISABLED);
+        }
 
         /* Checkbox di kanan */
         Rectangle cb = { sr.x + sr.width - 36, sr.y + 11, 22, 22 };
-        DrawRectangleRounded(cb, 0.3f, 6, chk ? COL_PRIMARY : COL_BORDER);
+        DrawRectangleRounded(cb, 0.3f, 6, chk ? COL_PRIMARY : (locked ? (Color){ 220, 225, 235, 255 } : COL_BORDER));
         if (chk) DrawCircle(PX(cb.x + 11), PX(cb.y + 11), 5, WHITE);
 
-        if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) slotChecked[s] = !slotChecked[s];
+        if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            if (chk) slotChecked[s] = false;
+            else if (checkedCount < 2) slotChecked[s] = true;
+        }
     }
 
-    /* Kolom Kanan: Rekomendasi Teman yang Jadwalnya Cocok */
+    /* Kolom Kanan: Rekomendasi Teman Cocok Berdasarkan Prioritas */
     float rx = cx + leftW + 20.0f;
     DrawTextBold("Rekomendasi Teman Cocok:", PX(rx), PX(topY), 16, 280, COL_NAVY);
 
@@ -1194,30 +1219,107 @@ static void DrawScheduleScreen(void)
     snprintf(schedTitle, sizeof schedTitle, "Hari %s  |  Fokus: %s", DAY_OPTIONS[selectedDayIdx], currentUserCourse);
     DrawTextBold(schedTitle, PX(matchCard.x + 18), PX(matchCard.y + 18), 14, PX(rightW - 36), COL_PRIMARY);
 
-    int matched = 0;
-    for (int i = 0; i < buddyCount && matched < 3; i++) {
-        if (strcmp(buddies[i].nim, currentUserNim) == 0) continue;
-        float my = matchCard.y + 54 + matched * 44.0f;
-        DrawAvatar(matchCard.x + 32, my + 14, 14, buddies[i].nama, COL_PRIMARY_LT, COL_NAVY);
-        DrawTextBold(buddies[i].nama, PX(matchCard.x + 54), PX(my + 2), 14, PX(rightW - 74), COL_TEXT);
-        DrawTextFit(buddies[i].hari,  PX(matchCard.x + 54), PX(my + 20), 12, PX(rightW - 74), COL_MUTED);
-        matched++;
+    /*
+     * Kumpulkan kandidat yang memenuhi syarat:
+     *   Priority 2: Hari sama + kedua jam kosong sama (hanya jika user memilih 2 jam)
+     *   Priority 1: Hari sama + minimal salah satu jam kosong sama
+     */
+    int recIdx[3]  = { -1, -1, -1 };
+    int recPrio[3] = {  0,  0,  0 };
+    int recCount   = 0;
+
+    if (checkedCount > 0) {
+        for (int prio = 2; prio >= 1 && recCount < 3; prio--) {
+            /* Lewati cek Priority 2 jika user hanya mencentang 1 slot jam */
+            if (prio == 2 && checkedCount < 2) continue;
+
+            for (int i = 0; i < buddyCount && recCount < 3; i++) {
+                if (strcmp(buddies[i].nim, currentUserNim) == 0) continue;
+
+                /* Syarat wajib: Hari harus sama */
+                if (strstr(buddies[i].hari, DAY_OPTIONS[selectedDayIdx]) == NULL) continue;
+
+                /* Hitung berapa jam kosong yang cocok */
+                int slotMatches = 0;
+                for (int k = 0; k < checkedCount; k++) {
+                    if (activeSlots[k] >= 0 && strstr(buddies[i].hari, SESSION_OPTIONS[activeSlots[k]]) != NULL) {
+                        slotMatches++;
+                    }
+                }
+
+                int buddyPrio = 0;
+                if (checkedCount == 2 && slotMatches == 2) buddyPrio = 2;
+                else if (slotMatches >= 1)                 buddyPrio = 1;
+
+                if (buddyPrio == prio) {
+                    recIdx[recCount]  = i;
+                    recPrio[recCount] = buddyPrio;
+                    recCount++;
+                }
+            }
+        }
     }
 
-    if (Button((Rectangle){ matchCard.x + 18, matchCard.y + 196, rightW - 36, 40 }, "Simpan & Cocokkan Jadwal", true, COL_PRIMARY)) {
-        int chosenSlot = 0;
-        for (int s = 0; s < SESSION_OPTION_COUNT; s++) {
-            if (slotChecked[s]) { chosenSlot = s; break; }
-        }
+    if (recCount == 0) {
+        const char *emptyMsg = "Belum ada teman dengan hari & jam yang cocok.";
+        Font fr = GetFontReg();
+        float fsize = 14.0f;
+        Vector2 tsz = MeasureTextEx(fr, emptyMsg, fsize, 0.5f);
 
-        snprintf(currentUserSched, sizeof currentUserSched, "%s, %s",
-                 DAY_OPTIONS[selectedDayIdx], SESSION_OPTIONS[chosenSlot]);
+        /* Area kosong di antara header kartu (y + 44) dan tombol Save (y + 196) */
+        float areaTop = matchCard.y + 44.0f;
+        float areaBot = matchCard.y + 196.0f;
+        float centerX = matchCard.x + (rightW - tsz.x) * 0.5f;
+        float centerY = areaTop + ((areaBot - areaTop) - tsz.y) * 0.5f;
 
-        if (loggedBuddyIdx >= 0 && loggedBuddyIdx < buddyCount) {
-            snprintf(buddies[loggedBuddyIdx].hari, sizeof buddies[loggedBuddyIdx].hari, "%s", currentUserSched);
-            Persist();
+        /* Jaga agar tidak keluar batas kiri kartu jika jendela dipersempit */
+        if (centerX < matchCard.x + 18.0f) centerX = matchCard.x + 18.0f;
+
+        DrawTextFit(emptyMsg, PX(centerX), PX(centerY), (int)fsize, PX(rightW - 36), COL_MUTED);
+    } else {
+        for (int m = 0; m < recCount; m++) {
+            int bi = recIdx[m];
+            float my = matchCard.y + 54 + m * 44.0f;
+
+            DrawAvatar(matchCard.x + 32, my + 14, 14, buddies[bi].nama, COL_PRIMARY_LT, COL_NAVY);
+            DrawTextBold(buddies[bi].nama, PX(matchCard.x + 54), PX(my + 2), 14, PX(rightW - 145), COL_TEXT);
+            DrawTextFit(buddies[bi].hari,  PX(matchCard.x + 54), PX(my + 20), 12, PX(rightW - 145), COL_MUTED);
+
+            /* Badge tingkat kecocokan di sisi kanan */
+            const char *badgeTxt = (recPrio[m] == 2) ? "Exact Match" : "1 Jadwal Cocok";
+            Color badgeBg = (recPrio[m] == 2) ? TILE_MINT_BG : COL_PRIMARY_LT;
+            Color badgeFg = (recPrio[m] == 2) ? COL_OK       : COL_PRIMARY;
+
+            Rectangle badge = { matchCard.x + rightW - 96, my + 6, 80, 22 };
+            DrawRectangleRounded(badge, 0.5f, 8, badgeBg);
+            DrawTextBold(badgeTxt, PX(badge.x + 8), PX(badge.y + 5), 11, 68, badgeFg);
         }
-        SetStatus("Jadwal belajar berhasil diperbarui & disimpan!", COL_OK);
+    }
+
+    /* Tombol Save: Gabungkan 1 Hari + 1 atau 2 Jam Kosong dan Simpan Otomatis */
+    if (Button((Rectangle){ matchCard.x + 18, matchCard.y + 196, rightW - 36, 40 }, "Save Jadwal Kosong", true, COL_PRIMARY)) {
+        if (checkedCount == 0) {
+            SetStatus("Pilih minimal 1 slot jam kosong terlebih dahulu!", COL_ERR);
+        } else {
+            char newSched[MAX_HARI];
+            snprintf(newSched, sizeof newSched, "%s", DAY_OPTIONS[selectedDayIdx]);
+
+            int added = 0;
+            for (int s = 0; s < SESSION_OPTION_COUNT && added < 2; s++) {
+                if (slotChecked[s]) {
+                    strncat(newSched, ", ", sizeof(newSched) - strlen(newSched) - 1);
+                    strncat(newSched, SESSION_OPTIONS[s], sizeof(newSched) - strlen(newSched) - 1);
+                    added++;
+                }
+            }
+
+            snprintf(currentUserSched, sizeof currentUserSched, "%s", newSched);
+            if (loggedBuddyIdx >= 0 && loggedBuddyIdx < buddyCount) {
+                snprintf(buddies[loggedBuddyIdx].hari, sizeof buddies[loggedBuddyIdx].hari, "%s", newSched);
+                Persist();
+            }
+            SetStatus("Jadwal kosong berhasil disimpan ke profil!", COL_OK);
+        }
     }
 }
 
