@@ -138,6 +138,15 @@ int AddGoal(const Goal *g)
     return goalCount++;
 }
 
+int AddChatMessage(const ChatMessage *m)
+{
+    void *p = chatLogs;
+    if (!EnsureCapacity(&p, &chatCapacity, chatCount, sizeof(ChatMessage))) return -1;
+    chatLogs = (ChatMessage *)p;
+    chatLogs[chatCount] = *m;
+    return chatCount++;
+}
+
 int RemoveGoal(int goalIndex)
 {
     if (goalIndex < 0 || goalIndex >= goalCount) return 0;
@@ -254,6 +263,12 @@ int SaveData(void)
         fprintf(f, "T|%s|%d|%s\n", goals[i].nimPemilik, goals[i].status, goals[i].deskripsi);
     }
 
+    for (int i = 0; i < chatCount; i++) {
+        fprintf(f, "C|%s|%s|%s|%s\n",
+                chatLogs[i].roomKey, chatLogs[i].sender,
+                chatLogs[i].timeStr, chatLogs[i].text);
+    }
+
     return fclose(f) == 0;
 }
 
@@ -314,6 +329,15 @@ int LoadData(void)
             g.status = (atoi(fld[1]) == 1) ? 1 : 0;
             snprintf(g.deskripsi,  sizeof g.deskripsi,  "%s", fld[2]);
             if (AddGoal(&g) >= 0) loaded++;
+
+        } else if (strcmp(fld[0], "C") == 0 && n >= 5) {
+            ChatMessage cm;
+            memset(&cm, 0, sizeof cm);
+            snprintf(cm.roomKey, sizeof cm.roomKey, "%s", fld[1]);
+            snprintf(cm.sender,  sizeof cm.sender,  "%s", fld[2]);
+            snprintf(cm.timeStr, sizeof cm.timeStr, "%s", fld[3]);
+            snprintf(cm.text,    sizeof cm.text,    "%s", fld[4]);
+            if (AddChatMessage(&cm) >= 0) loaded++;
         }
     }
 
@@ -332,7 +356,8 @@ void InitData(void)
 
 void FreeData(void)
 {
-    free(buddies); buddies = NULL; buddyCount = 0; buddyCapacity = 0;
-    free(groups);  groups  = NULL; groupCount = 0; groupCapacity = 0;
-    free(goals);   goals   = NULL; goalCount  = 0; goalCapacity  = 0;
+    free(buddies);  buddies  = NULL; buddyCount = 0; buddyCapacity = 0;
+    free(groups);   groups   = NULL; groupCount = 0; groupCapacity = 0;
+    free(goals);    goals    = NULL; goalCount  = 0; goalCapacity  = 0;
+    free(chatLogs); chatLogs = NULL; chatCount  = 0; chatCapacity  = 0;
 }

@@ -7,8 +7,8 @@ B|Eka Putri|2410512041|Sistem Informasi|Jumat, 08.00 - 10.00
 B|Fajar Nugroho|2410512047|Basis Data|Senin, 15.00 - 17.00
 B|Ferdigo Achda Gamis|2610512113|Pemrograman C|Senin, 08.00 - 10.00, 13.00 - 15.00
 B|Fathir Bentala Rasheed|2610512114|Pemrograman C|Rabu, 13.00 - 15.00
-G|C Warriors|Pemrograman C|2|5|Aulia Rahma;Citra Lestari
-G|Data Wizards|Basis Data|3|5|Bima Pratama;Fajar Nugroho;Fathir Bentala Rasheed
+G|C Warriors|Pemrograman C|3|5|Aulia Rahma;Citra Lestari;Fathir Bentala Rasheed
+G|Data Wizards|Basis Data|2|5|Bima Pratama;Fajar Nugroho
 G|Grup Pemrograman C|Pemrograman C|1|5|Ferdigo Achda Gamis
 G|Test 123|Pemrograman C|1|5|Ferdigo Achda Gamis
 G|Test 321|Pemrograman C|1|5|Ferdigo Achda Gamis
@@ -19,3 +19,7 @@ T|2610512113|0|GAK TAU NGAPAIN
 T|2610512114|0|1
 T|2610512114|0|2
 T|2610512114|0|3
+C|G:C Warriors|Aulia Rahma|14:12|Halo semuanya! Ada yang mau bahas latihan pointer malam ini?
+C|G:C Warriors|Citra Lestari|14:16|Gas! Aku masih agak bingung di bagian realloc nih.
+C|DM:2610512113:2610512114|Fathir Bentala Rasheed|Now|Halo Bro
+C|DM:2610512113:2610512114|Ferdigo Achda Gamis|Now|Halo bre

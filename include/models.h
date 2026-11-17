@@ -11,8 +11,17 @@
 #define MAX_GOAL_DESC      100
 #define COURSE_COUNT       4
 #define MAX_GOALS          1000
+#define MAX_CHAT_MSGS      200
+#define MAX_CHAT_LEN       180
 
 /* ---------- Data models (PRD section 7.1) ---------- */
+typedef struct {
+    char roomKey[64];
+    char sender[MAX_NAMA];
+    char text[MAX_CHAT_LEN];
+    char timeStr[12];
+} ChatMessage;
+
 typedef struct {
     char nama[MAX_NAMA];
     char nim[MAX_NIM];
@@ -36,6 +45,10 @@ typedef struct {
 
 /* ---------- Global state (defined in main.c) ----------
  * Dynamic arrays: grown with realloc() by file_manager.c               */
+extern ChatMessage *chatLogs;
+extern int          chatCount;
+extern int          chatCapacity;
+
 extern StudyBuddy *buddies;
 extern int         buddyCount;
 extern int         buddyCapacity;

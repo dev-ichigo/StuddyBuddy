@@ -20,8 +20,6 @@
 #define GROUP_CARD_H      188.0f
 #define GOAL_ROW_H        80.0f
 
-#define MAX_CHAT_MSGS     60
-#define MAX_CHAT_LEN      180
 #define MAX_USER_GOALS    4
 /* Virtual canvas resolution (base design size) */
 #define VIRT_H 640.0f
@@ -90,7 +88,6 @@ typedef enum {
     VIEW_GROUPS,        /* Study Groups List */
     VIEW_GROUP_DETAIL,  /* Group Detail & Join */
     VIEW_GOALS,         /* Learning Goals */
-    VIEW_CHAT,          /* Group Chat */
     VIEW_COUNT
 } WorkflowView;
 
@@ -110,13 +107,25 @@ typedef struct {
     float scroll;
 } DropdownState;
 
-typedef struct {
-    int  groupIdx;
-    char sender[MAX_NAMA];
-    char text[MAX_CHAT_LEN];
-    char timeStr[12];
-    bool isMe;
-} ChatMessage;
+/* Floating Chat Box State */
+#define MAX_DM_CONTACTS 64
+static char          chatInput[MAX_CHAT_LEN];
+static bool          chatInitPos     = false;
+static bool          chatMinimized   = true;
+static Rectangle     chatWinRect     = { 0, 0, 340.0f, 410.0f };
+static bool          chatDragging    = false;
+static Vector2       chatDragOffset  = { 0 };
+static bool          chatResizing    = false;
+static Vector2       chatResizeStart = { 0 };
+static Vector2       chatStartSize   = { 0 };
+static char          activeChatKey[64]   = "";
+static char          activeChatTitle[64] = "Pilih Chat";
+static DropdownState chatRoomDd      = { false, 0, 0.0f };
+
+/* Daftar kontak DM yang pernah dibuka khusus per-user */
+static char          dmOwnerNim[MAX_DM_CONTACTS][MAX_NIM];
+static char          dmTargetNim[MAX_DM_CONTACTS][MAX_NIM];
+static int           dmContactCount  = 0;
 
 /* ====================================================================== */
 /* Global State                                                           */
@@ -176,11 +185,6 @@ static DropdownState newGroupCourseDd = { false, 0 };
 
 /* Goals State (Screen 8 Mockup) */
 static char goalInput[MAX_GOAL_DESC];
-
-/* Chat State (Screen 9 Mockup) */
-static ChatMessage chatLogs[MAX_CHAT_MSGS];
-static int         chatCount = 0;
-static char        chatInput[MAX_CHAT_LEN];
 
 /* Scroll & UI Helpers */
 static Rectangle blockRect = { 0 }, nextBlockRect = { 0 };
@@ -663,27 +667,98 @@ static void LoginWithBuddyIndex(int idx)
     if (countChecked == 0) slotChecked[0] = true;
 }
 
-static void SeedInitialChat(void)
+static void AddUserDmContact(const char *ownerNim, const char *targetNim)
 {
-    if (chatCount > 0) return;
-    chatCount = 3;
-    chatLogs[0] = (ChatMessage){ 0, "Raka Pratama", "Halo semuanya! Aku udah selesai ngerjain latihan nomor 3, ada yang mau diskusi bareng?", "14:12", false };
-    chatLogs[1] = (ChatMessage){ 0, "Nayla Putri",  "Aku juga masih agak bingung di bagian pointer nih, bahas bareng yuk!", "14:16", false };
-    chatLogs[2] = (ChatMessage){ 0, "Dinda Aulia",  "Gas! Kita ketemu di perpustakaan kampus jam 15.00 ya.", "14:18", false };
+    if (!ownerNim || !targetNim || strcmp(ownerNim, targetNim) == 0) return;
+    for (int i = 0; i < dmContactCount; i++) {
+        if (strcmp(dmOwnerNim[i], ownerNim) == 0 && strcmp(dmTargetNim[i], targetNim) == 0) {
+            return; /* Sudah ada di daftar chat user ini */
+        }
+    }
+    if (dmContactCount < MAX_DM_CONTACTS) {
+        snprintf(dmOwnerNim[dmContactCount],  MAX_NIM, "%s", ownerNim);
+        snprintf(dmTargetNim[dmContactCount], MAX_NIM, "%s", targetNim);
+        dmContactCount++;
+    }
 }
 
-static void PushChatMessage(int groupIdx, const char *sender, const char *msg, bool isMe)
+static void MakeDmRoomKey(char *outKey, size_t cap, const char *nimA, const char *nimB)
 {
-    if (chatCount >= MAX_CHAT_MSGS) {
-        for (int i = 1; i < MAX_CHAT_MSGS; i++) chatLogs[i - 1] = chatLogs[i];
-        chatCount = MAX_CHAT_MSGS - 1;
+    /* Urutkan NIM secara leksikografis agar User A <-> User B berbagi roomKey yang sama */
+    if (strcmp(nimA, nimB) < 0) snprintf(outKey, cap, "DM:%s:%s", nimA, nimB);
+    else                         snprintf(outKey, cap, "DM:%s:%s", nimB, nimA);
+}
+
+static void OpenDirectChatWithNim(const char *targetNim, const char *targetName)
+{
+    if (!targetNim || strcmp(targetNim, currentUserNim) == 0) return;
+
+    AddUserDmContact(currentUserNim, targetNim);
+
+    char rKey[64], title[64];
+    MakeDmRoomKey(rKey, sizeof rKey, currentUserNim, targetNim);
+    snprintf(title, sizeof title, "[Member] %s", targetName);
+
+    snprintf(activeChatKey,   sizeof activeChatKey,   "%s", rKey);
+    snprintf(activeChatTitle, sizeof activeChatTitle, "%s", title);
+    chatMinimized   = false;
+    chatRoomDd.open = false;
+    focusId         = ID_CHAT_INPUT;
+}
+
+static void OpenChatRoom(const char *roomKey, const char *title)
+{
+    snprintf(activeChatKey,   sizeof activeChatKey,   "%s", roomKey);
+    snprintf(activeChatTitle, sizeof activeChatTitle, "%s", title);
+    chatMinimized   = false;
+    chatRoomDd.open = false;
+    focusId         = ID_CHAT_INPUT;
+}
+
+static void SyncDmContactsFromHistory(void)
+{
+    for (int i = 0; i < chatCount; i++) {
+        if (strncmp(chatLogs[i].roomKey, "DM:", 3) == 0) {
+            char tmp[64];
+            snprintf(tmp, sizeof tmp, "%s", chatLogs[i].roomKey + 3);
+            char *sep = strchr(tmp, ':');
+            if (sep != NULL) {
+                *sep = '\0';
+                const char *nimA = tmp;
+                const char *nimB = sep + 1;
+                AddUserDmContact(nimA, nimB);
+                AddUserDmContact(nimB, nimA);
+            }
+        }
     }
-    ChatMessage *m = &chatLogs[chatCount++];
-    m->groupIdx = groupIdx;
-    snprintf(m->sender, sizeof m->sender, "%s", sender);
-    snprintf(m->text,   sizeof m->text,   "%s", msg);
-    snprintf(m->timeStr, sizeof m->timeStr, "Now");
-    m->isMe = isMe;
+}
+
+static void SeedInitialChat(void)
+{
+    SyncDmContactsFromHistory();
+    if (chatCount > 0) return;
+
+    ChatMessage m1 = { "G:C Warriors", "Aulia Rahma",   "Halo semuanya! Ada yang mau bahas latihan pointer malam ini?", "14:12" };
+    ChatMessage m2 = { "G:C Warriors", "Citra Lestari", "Gas! Aku masih agak bingung di bagian realloc nih.", "14:16" };
+    AddChatMessage(&m1);
+    AddChatMessage(&m2);
+    Persist();
+}
+
+static void PushChatMessage(const char *roomKey, const char *sender, const char *msg)
+{
+    ChatMessage m;
+    memset(&m, 0, sizeof m);
+    snprintf(m.roomKey, sizeof m.roomKey, "%s", roomKey);
+    snprintf(m.sender,  sizeof m.sender,  "%s", sender);
+    snprintf(m.text,    sizeof m.text,    "%s", msg);
+    SanitizeText(m.text);
+    if (m.text[0] == '\0') return;
+
+    snprintf(m.timeStr, sizeof m.timeStr, "Now");
+    if (AddChatMessage(&m) >= 0) {
+        Persist(); /* Langsung simpan permanen ke data/studybuddy_data.txt */
+    }
 }
 
 /* ====================================================================== */
@@ -931,10 +1006,9 @@ static void DrawSidebar(void)
         { "Find Buddy",      VIEW_FIND_BUDDY },
         { "Match Schedule",  VIEW_SCHEDULE },
         { "Study Groups",    VIEW_GROUPS },
-        { "Learning Goals",  VIEW_GOALS },
-        { "Group Chat",      VIEW_CHAT }
+        { "Learning Goals",  VIEW_GOALS }
     };
-    int navCount = 6;
+    int navCount = 5;
 
     for (int i = 0; i < navCount; i++) {
         Rectangle r = { 14, 94.0f + i * 48.0f, SIDEBAR_W - 28, 40 };
@@ -976,6 +1050,7 @@ static void DrawSidebar(void)
     if (Button((Rectangle){ prof.x + 12, prof.y + 58, prof.width - 24, 30 }, "Log Out", true, COL_ERR)) {
         isLoggedIn = false;
         loggedBuddyIdx = -1;
+        chatMinimized = true;
         GoView(VIEW_SPLASH);
     }
 }
@@ -1166,7 +1241,6 @@ static void DrawFindBuddyScreen(void)
     float cx = ContentX();
     float cw = ContentW();
 
-    /* Simpan query sebelumnya untuk mendeteksi perubahan ketikan search */
     char prevSearch[64];
     snprintf(prevSearch, sizeof prevSearch, "%s", findSearch);
 
@@ -1197,7 +1271,6 @@ static void DrawFindBuddyScreen(void)
         px += pw + 8.0f;
     }
 
-    /* Kumpulkan indeks teman yang lolos filter */
     int totalMatched = 0;
     for (int i = 0; i < buddyCount; i++) {
         if (strcmp(buddies[i].nim, currentUserNim) == 0) continue;
@@ -1233,19 +1306,24 @@ static void DrawFindBuddyScreen(void)
             DrawCard(card, WHITE, COL_BORDER, 16.0f);
 
             DrawAvatar(card.x + 38, card.y + 37, 22, buddies[i].nama, COL_PRIMARY_LT, COL_NAVY);
-            DrawTextBold(buddies[i].nama, PX(card.x + 74), PX(card.y + 15), 17, PX(card.width - 420), COL_TEXT);
+            DrawTextBold(buddies[i].nama, PX(card.x + 74), PX(card.y + 15), 17, PX(card.width - 495), COL_TEXT);
 
             char sub[96];
             snprintf(sub, sizeof sub, "NIM %s  |  %s", buddies[i].nim, buddies[i].matkul);
-            DrawTextFit(sub, PX(card.x + 74), PX(card.y + 40), 14, PX(card.width - 420), COL_MUTED);
+            DrawTextFit(sub, PX(card.x + 74), PX(card.y + 40), 14, PX(card.width - 495), COL_MUTED);
 
             /* Badge Jadwal */
-            Rectangle pill = { card.x + card.width - 320, card.y + 21, 185, 32 };
+            Rectangle pill = { card.x + card.width - 398, card.y + 21, 180, 32 };
             DrawRectangleRounded(pill, 0.5f, 10, COL_PRIMARY_LT);
             DrawTextFit(buddies[i].hari, PX(pill.x + 14), PX(pill.y + 8), 13, PX(pill.width - 24), COL_PRIMARY);
 
-            /* Tombol Match / Invite */
-            if (Button((Rectangle){ card.x + card.width - 122, card.y + 20, 106, 34 }, "Invite", true, COL_PRIMARY)) {
+            /* Tombol Chat Pribadi */
+            if (OutlineButton((Rectangle){ card.x + card.width - 206, card.y + 20, 86, 34 }, "Chat", COL_PRIMARY, COL_PRIMARY)) {
+                OpenDirectChatWithNim(buddies[i].nim, buddies[i].nama);
+            }
+
+            /* Tombol Invite */
+            if (Button((Rectangle){ card.x + card.width - 110, card.y + 20, 94, 34 }, "Invite", true, COL_PRIMARY)) {
                 char msg[128];
                 snprintf(msg, sizeof msg, "Permintaan belajar bareng terkirim ke %s!", buddies[i].nama);
                 SetStatus(msg, COL_OK);
@@ -1577,7 +1655,6 @@ static void DrawGroupDetailScreen(void)
         if (strcmp(g->anggotaNama[k], currentUserName) == 0) alreadyMember = true;
     }
 
-    /* Cek hak akses Creator (anggota indeks 0) dan Role Khusus Admin */
     bool isCreator = (g->jumlahAnggota > 0 && strcmp(g->anggotaNama[0], currentUserName) == 0);
     bool isAdmin   = IsCurrentUserAdmin();
     bool canDelete = (isCreator || isAdmin);
@@ -1592,7 +1669,6 @@ static void DrawGroupDetailScreen(void)
     }
     DrawTextBold("Group Detail", PX(cx + 110), 28, 26, 350, COL_NAVY);
 
-    /* Badge Indikator Privilege di Kanan Atas Header */
     if (isAdmin && !isCreator) {
         Rectangle admTag = { cx + cw - 175, 28, 175, 30 };
         DrawRectangleRounded(admTag, 0.5f, 8, TILE_AMBER_BG);
@@ -1616,7 +1692,6 @@ static void DrawGroupDetailScreen(void)
              g->matkul, g->jumlahAnggota, g->maxAnggota);
     DrawTextFit(meta, PX(topCard.x + 92), PX(topCard.y + 56), 14, PX(cw - 320), COL_MUTED);
 
-    /* Tombol Join / Leave / Status Creator di Kartu Atas */
     if (isCreator) {
         DrawRectangleRounded((Rectangle){ topCard.x + cw - 180, topCard.y + 36, 156, 42 }, 0.45f, 10, TILE_MINT_BG);
         DrawTextBold("Creator Aktif", PX(topCard.x + cw - 148), PX(topCard.y + 48), 14, 130, COL_OK);
@@ -1647,23 +1722,41 @@ static void DrawGroupDetailScreen(void)
     for (int k = 0; k < g->jumlahAnggota; k++) {
         float ay = memCard.y + 58 + k * 46.0f;
         DrawAvatar(memCard.x + 42, ay + 16, 16, g->anggotaNama[k], COL_PRIMARY_LT, COL_NAVY);
-        DrawTextBold(g->anggotaNama[k], PX(memCard.x + 70), PX(ay + 7), 16, 300, COL_TEXT);
+        DrawTextBold(g->anggotaNama[k], PX(memCard.x + 70), PX(ay + 7), 16, PX(cw - 300), COL_TEXT);
+
+        /* Cari NIM anggota berdasarkan nama agar bisa langsung DM */
+        const char *memberNim = NULL;
+        for (int b = 0; b < buddyCount; b++) {
+            if (strcmp(buddies[b].nama, g->anggotaNama[k]) == 0) {
+                memberNim = buddies[b].nim;
+                break;
+            }
+        }
+
+        bool isSelf = (strcmp(g->anggotaNama[k], currentUserName) == 0);
+        if (!isSelf && memberNim != NULL) {
+            if (OutlineButton((Rectangle){ memCard.x + cw - 216, ay + 2, 74, 30 }, "Chat", COL_PRIMARY, COL_PRIMARY)) {
+                OpenDirectChatWithNim(memberNim, g->anggotaNama[k]);
+            }
+        }
 
         if (k == 0) {
             DrawRectangleRounded((Rectangle){ memCard.x + cw - 130, ay + 4, 104, 26 }, 0.5f, 8, TILE_AMBER_BG);
             DrawTextBold("Creator", PX(memCard.x + cw - 104), PX(ay + 10), 13, 80, TILE_AMBER_FG);
         } else {
-            DrawTextFit("Member", PX(memCard.x + cw - 104), PX(ay + 10), 13, 80, COL_MUTED);
+            DrawTextFit(isSelf ? "You" : "Member", PX(memCard.x + cw - 104), PX(ay + 10), 13, 80, COL_MUTED);
         }
     }
 
-    /* Baris Tombol Aksi Bawah: Chat Group (Khusus Member) + Pengaturan Hapus/Bubarkan Grup (Creator / Admin) */
+    /* Baris Tombol Aksi Bawah */
     float btnY = ContentBottom() - 46.0f;
 
     if (!canDelete) {
         if (alreadyMember) {
             if (Button((Rectangle){ cx, btnY, cw, 46 }, "Buka Chat Group", true, COL_PRIMARY)) {
-                GoView(VIEW_CHAT);
+                char rKey[64];
+                snprintf(rKey, sizeof rKey, "G:%s", g->namaGroup);
+                OpenChatRoom(rKey, g->namaGroup);
             }
         } else {
             const char *joinChatLabel = full ? "Grup Penuh (Chat Khusus Anggota)"
@@ -1681,7 +1774,9 @@ static void DrawGroupDetailScreen(void)
 
         if (alreadyMember) {
             if (Button((Rectangle){ cx, btnY, chatW, 46 }, "Buka Chat Group", true, COL_PRIMARY)) {
-                GoView(VIEW_CHAT);
+                char rKey[64];
+                snprintf(rKey, sizeof rKey, "G:%s", g->namaGroup);
+                OpenChatRoom(rKey, g->namaGroup);
             }
         } else {
             const char *joinChatLabel = full ? "Chat Khusus Anggota (Grup Penuh)"
@@ -1853,98 +1948,297 @@ static void DrawGoalsScreen(void)
 /* SCREEN 9: Group Chat (Mockup Screen 9)                                 */
 /* ====================================================================== */
 
-static void DrawChatScreen(void)
+/* ====================================================================== */
+/* FLOATING CHAT BOX (Draggable, Resizable & Minimizable)                 */
+/* ====================================================================== */
+
+static void DrawFloatingChatBox(void)
 {
-    /* Pengaman: Jika selectedGroupIdx bukan grup milik user, cari grup pertama yang dia ikuti */
-    if (!IsMemberOfGroup(selectedGroupIdx, currentUserName)) {
+    float sw = GetVirtW();
+    float sh = VIRT_H;
+    Vector2 m = GetUiMouse();
+    Font fb = GetFontBold();
+    Font fr = GetFontReg();
+
+    /* 1) Otomatis masukkan semua Study Group yang diikuti user aktif */
+    #define MAX_CHAT_ROOMS 128
+    char roomKeys[MAX_CHAT_ROOMS][64];
+    char roomLabels[MAX_CHAT_ROOMS][64];
+    const char *ddItems[MAX_CHAT_ROOMS];
+    int roomCount = 0;
+
+    for (int i = 0; i < groupCount && roomCount < MAX_CHAT_ROOMS; i++) {
+        if (IsMemberOfGroup(i, currentUserName)) {
+            snprintf(roomKeys[roomCount],   64, "G:%s", groups[i].namaGroup);
+            snprintf(roomLabels[roomCount], 64, "[Grup] %s", groups[i].namaGroup);
+            ddItems[roomCount] = roomLabels[roomCount];
+            roomCount++;
+        }
+    }
+
+    /* 2) Masukkan hanya kontak DM yang sudah ditambahkan / di-chat oleh user aktif */
+    for (int d = 0; d < dmContactCount && roomCount < MAX_CHAT_ROOMS; d++) {
+        if (strcmp(dmOwnerNim[d], currentUserNim) != 0) continue;
+
+        const char *targetName = dmTargetNim[d];
+        for (int b = 0; b < buddyCount; b++) {
+            if (strcmp(buddies[b].nim, dmTargetNim[d]) == 0) {
+                targetName = buddies[b].nama;
+                break;
+            }
+        }
+
+        MakeDmRoomKey(roomKeys[roomCount], 64, currentUserNim, dmTargetNim[d]);
+        snprintf(roomLabels[roomCount], 64, "[Member] %s", targetName);
+        ddItems[roomCount] = roomLabels[roomCount];
+        roomCount++;
+    }
+
+    /* Sinkronkan room aktif dengan dropdown */
+    if (roomCount > 0) {
         int found = -1;
-        for (int i = 0; i < groupCount; i++) {
-            if (IsMemberOfGroup(i, currentUserName)) {
+        for (int i = 0; i < roomCount; i++) {
+            if (strcmp(roomKeys[i], activeChatKey) == 0) {
                 found = i;
                 break;
             }
         }
         if (found >= 0) {
-            selectedGroupIdx = found;
+            chatRoomDd.selected = found;
         } else {
-            DrawHeader("Group Chat", "Ruang diskusi khusus anggota kelompok belajar");
-            float cx = ContentX();
-            float cw = ContentW();
-            Rectangle emptyCard = { cx, 96, cw, 220 };
-            DrawCard(emptyCard, WHITE, COL_BORDER, 18.0f);
+            chatRoomDd.selected = 0;
+            snprintf(activeChatKey,   sizeof activeChatKey,   "%s", roomKeys[0]);
+            snprintf(activeChatTitle, sizeof activeChatTitle, "%s", roomLabels[0]);
+        }
+    } else {
+        activeChatKey[0] = '\0';
+        snprintf(activeChatTitle, sizeof activeChatTitle, "Belum ada obrolan");
+    }
 
-            const char *title = "Kamu Belum Bergabung di Grup Mana Pun";
-            const char *desc  = "Silakan pilih dan gabung ke salah satu kelompok di menu Study Groups terlebih dahulu.";
-            Font fb = GetFontBold();
-            Font fr = GetFontReg();
-            Vector2 tsz = MeasureTextEx(fb, title, 18.0f, 0.5f);
-            Vector2 dsz = MeasureTextEx(fr, desc,  14.0f, 0.5f);
+    /* Mode Minimized: Kotak Bar Kecil di Pojok Kanan Bawah dengan tulisan "Chat" di tengah */
+    if (chatMinimized) {
+        float minW = 210.0f;
+        float minH = 42.0f;
+        Rectangle minBox = { sw - minW - 22.0f, sh - minH - 14.0f, minW, minH };
+        bool hover = CheckCollisionPointRec(m, minBox);
 
-            DrawTextEx(fb, title, (Vector2){ cx + (cw - tsz.x) * 0.5f, emptyCard.y + 48 }, 18.0f, 0.5f, COL_NAVY);
-            DrawTextEx(fr, desc,  (Vector2){ cx + (cw - dsz.x) * 0.5f, emptyCard.y + 80 }, 14.0f, 0.5f, COL_MUTED);
+        DrawRectangleRounded(minBox, 0.35f, 12, hover ? COL_NAVY_HOVER : COL_NAVY);
+        DrawCircle(PX(minBox.x + 22), PX(minBox.y + minH * 0.5f), 5, COL_OK);
 
-            if (Button((Rectangle){ cx + (cw - 210.0f) * 0.5f, emptyCard.y + 132, 210.0f, 42 },
-                       "Lihat Study Groups", true, COL_PRIMARY)) {
-                GoView(VIEW_GROUPS);
+        Vector2 tsz = MeasureTextEx(fb, "Chat", 16.0f, 0.5f);
+        DrawTextEx(fb, "Chat",
+                   (Vector2){ minBox.x + (minW - tsz.x) * 0.5f, minBox.y + (minH - tsz.y) * 0.5f },
+                   16.0f, 0.5f, WHITE);
+
+        DrawTextBold("+", PX(minBox.x + minW - 24), PX(minBox.y + 11), 18, 20, WHITE);
+
+        if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            if (!chatInitPos) {
+                chatWinRect.width  = 340.0f;
+                chatWinRect.height = 410.0f;
+                chatWinRect.x = sw - chatWinRect.width - 22.0f;
+                chatWinRect.y = sh - chatWinRect.height - 14.0f;
+                chatInitPos = true;
             }
-            return;
+            chatMinimized = false;
+            focusId = ID_CHAT_INPUT;
+        }
+
+        nextBlockRect = minBox;
+        nextBlockActive = true;
+        return;
+    }
+
+    if (!chatInitPos) {
+        chatWinRect.width  = 340.0f;
+        chatWinRect.height = 410.0f;
+        chatWinRect.x = sw - chatWinRect.width - 22.0f;
+        chatWinRect.y = sh - chatWinRect.height - 14.0f;
+        chatInitPos = true;
+    }
+
+    float headerH = 40.0f;
+    Rectangle headerRect = { chatWinRect.x, chatWinRect.y, chatWinRect.width, headerH };
+    Rectangle minBtnRect = { chatWinRect.x + chatWinRect.width - 36.0f, chatWinRect.y + 7.0f, 26.0f, 26.0f };
+    Rectangle gripRect   = { chatWinRect.x + chatWinRect.width - 18.0f, chatWinRect.y + chatWinRect.height - 18.0f, 18.0f, 18.0f };
+
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        if (CheckCollisionPointRec(m, gripRect)) {
+            chatResizing    = true;
+            chatResizeStart = m;
+            chatStartSize   = (Vector2){ chatWinRect.width, chatWinRect.height };
+        } else if (CheckCollisionPointRec(m, headerRect) && !CheckCollisionPointRec(m, minBtnRect)) {
+            chatDragging   = true;
+            chatDragOffset = (Vector2){ m.x - chatWinRect.x, m.y - chatWinRect.y };
         }
     }
 
-    const char *gName = groups[selectedGroupIdx].namaGroup;
-    char sub[96];
-    snprintf(sub, sizeof sub, "Diskusi kelompok aktif  |  Login sebagai %s", currentUserName);
-    DrawHeader(gName, sub);
-
-    float cx = ContentX();
-    float cw = ContentW();
-    float bottomY = ContentBottom();
-
-    Rectangle chatBox = { cx, 94, cw, bottomY - 152 };
-    DrawCard(chatBox, WHITE, COL_BORDER, 18.0f);
-
-    Font fr = GetFontReg();
-    Font fb = GetFontBold();
-
-    BeginClip(chatBox);
-    float y = chatBox.y + 18.0f;
-    for (int i = 0; i < chatCount; i++) {
-        ChatMessage *m = &chatLogs[i];
-        float bubbleW = cw * 0.62f;
-        float bubbleH = 58.0f;
-
-        if (m->isMe) {
-            /* Bubble kanan biru */
-            Rectangle b = { chatBox.x + cw - bubbleW - 22, y, bubbleW, bubbleH };
-            DrawRectangleRounded(b, 0.35f, 12, COL_PRIMARY);
-            DrawTextWrap(m->text, PX(b.x + 16), PX(b.y + 12), 14, PX(bubbleW - 32), 18, WHITE, 2);
-            DrawTextFit(m->timeStr, PX(b.x + bubbleW - 44), PX(b.y + bubbleH - 18), 11, 40, (Color){ 215, 232, 255, 255 });
-        } else {
-            /* Bubble kiri abu-abu lembut dengan avatar */
-            DrawAvatar(chatBox.x + 34, y + 20, 16, m->sender, TILE_AMBER_BG, COL_NAVY);
-            DrawTextBold(m->sender, PX(chatBox.x + 58), PX(y), 13, 250, COL_NAVY);
-
-            Rectangle b = { chatBox.x + 58, y + 18, bubbleW, bubbleH };
-            DrawRectangleRounded(b, 0.35f, 12, COL_BG);
-            DrawTextWrap(m->text, PX(b.x + 14), PX(b.y + 10), 14, PX(bubbleW - 28), 18, COL_TEXT, 2);
-            y += 16.0f;
-        }
-        y += bubbleH + 14.0f;
+    if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+        chatDragging = false;
+        chatResizing = false;
     }
-    EndClip();
-    (void)fr; (void)fb;
 
-    /* Input Pesan di bawah */
-    float iy = bottomY - 44.0f;
-    bool enter = TextInput(ID_CHAT_INPUT, (Rectangle){ cx, iy, cw - 124, 44 },
-                           chatInput, MAX_CHAT_LEN, "Ketik pesan diskusi kelompok...", false);
+    if (chatDragging) {
+        chatWinRect.x = m.x - chatDragOffset.x;
+        chatWinRect.y = m.y - chatDragOffset.y;
+    }
+    if (chatResizing) {
+        float nw = chatStartSize.x + (m.x - chatResizeStart.x);
+        float nh = chatStartSize.y + (m.y - chatResizeStart.y);
+        if (nw < 290.0f) nw = 290.0f;
+        if (nw > sw - SIDEBAR_W - 24.0f) nw = sw - SIDEBAR_W - 24.0f;
+        if (nh < 280.0f) nh = 280.0f;
+        if (nh > sh - 24.0f) nh = sh - 24.0f;
+        chatWinRect.width  = nw;
+        chatWinRect.height = nh;
+    }
 
-    if (Button((Rectangle){ cx + cw - 112, iy, 112, 44 }, "Kirim", true, COL_PRIMARY) || enter) {
-        if (chatInput[0] != '\0') {
-            PushChatMessage(selectedGroupIdx, currentUserName, chatInput, true);
+    if (chatWinRect.x < 8.0f) chatWinRect.x = 8.0f;
+    if (chatWinRect.y < 8.0f) chatWinRect.y = 8.0f;
+    if (chatWinRect.x + chatWinRect.width > sw - 8.0f)  chatWinRect.x = sw - chatWinRect.width - 8.0f;
+    if (chatWinRect.y + chatWinRect.height > sh - 8.0f) chatWinRect.y = sh - chatWinRect.height - 8.0f;
+
+    /* Shadow & Body Utama Box Chat */
+    DrawRectangleRounded((Rectangle){ chatWinRect.x + 3, chatWinRect.y + 4, chatWinRect.width, chatWinRect.height },
+                         0.08f, 12, (Color){ 15, 25, 48, 45 });
+    DrawCard(chatWinRect, WHITE, COL_PRIMARY, 14.0f);
+
+    /* Header Navy dengan Tulisan "Chat" Tepat di Tengah Atas */
+    DrawRectangleRounded(headerRect, 0.25f, 10, COL_NAVY);
+    DrawRectangle(PX(headerRect.x), PX(headerRect.y + headerH - 10), PX(headerRect.width), 10, COL_NAVY);
+
+    Vector2 titleSz = MeasureTextEx(fb, "Chat", 16.0f, 0.5f);
+    DrawTextEx(fb, "Chat",
+               (Vector2){ headerRect.x + (headerRect.width - titleSz.x) * 0.5f,
+                          headerRect.y + (headerH - titleSz.y) * 0.5f },
+               16.0f, 0.5f, WHITE);
+
+    bool minHover = CheckCollisionPointRec(m, minBtnRect);
+    DrawRectangleRounded(minBtnRect, 0.35f, 6, minHover ? COL_NAVY_HOVER : COL_NAVY_DARK);
+    DrawTextBold("-", PX(minBtnRect.x + 9), PX(minBtnRect.y + 3), 18, 20, WHITE);
+    if (minHover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        chatMinimized = true;
+        chatRoomDd.open = false;
+        return;
+    }
+
+    float pad = 12.0f;
+    float innerW = chatWinRect.width - pad * 2.0f;
+
+    /* Area Isi Pesan Chat */
+    float msgTop = chatWinRect.y + headerH + 48.0f;
+    float msgBot = chatWinRect.y + chatWinRect.height - 54.0f;
+    Rectangle msgArea = { chatWinRect.x + pad, msgTop, innerW, msgBot - msgTop };
+    DrawRectangleRounded(msgArea, 0.06f, 8, COL_BG);
+
+    Camera2D cam = GetUiCamera();
+    BeginScissorMode((int)(msgArea.x * cam.zoom + cam.offset.x),
+                     (int)(msgArea.y * cam.zoom + cam.offset.y),
+                     (int)(msgArea.width * cam.zoom),
+                     (int)(msgArea.height * cam.zoom));
+
+    float y = msgArea.y + 10.0f;
+    int shownMsgs = 0;
+    if (roomCount > 0) {
+        for (int i = 0; i < chatCount; i++) {
+            ChatMessage *cm = &chatLogs[i];
+            if (strcmp(cm->roomKey, activeChatKey) != 0) continue;
+            shownMsgs++;
+
+            bool isMine = (strcmp(cm->sender, currentUserName) == 0);
+            float bubbleW = innerW * 0.72f;
+            float bubbleH = 48.0f;
+
+            if (isMine) {
+                Rectangle b = { msgArea.x + innerW - bubbleW - 8.0f, y, bubbleW, bubbleH };
+                DrawRectangleRounded(b, 0.3f, 10, COL_PRIMARY);
+                DrawTextWrap(cm->text, PX(b.x + 10), PX(b.y + 8), 13, PX(bubbleW - 20), 16, WHITE, 2);
+            } else {
+                DrawTextBold(cm->sender, PX(msgArea.x + 10), PX(y), 11, PX(innerW - 20), COL_NAVY);
+                Rectangle b = { msgArea.x + 8.0f, y + 14.0f, bubbleW, bubbleH };
+                DrawRectangleRounded(b, 0.3f, 10, WHITE);
+                DrawTextWrap(cm->text, PX(b.x + 10), PX(b.y + 8), 13, PX(bubbleW - 20), 16, COL_TEXT, 2);
+                y += 14.0f;
+            }
+            y += bubbleH + 10.0f;
+        }
+    }
+
+    if (roomCount == 0) {
+        const char *noRoom = "Gabung grup atau klik Chat pada teman!";
+        Vector2 esz = MeasureTextEx(fr, noRoom, 12.0f, 0.5f);
+        DrawTextEx(fr, noRoom,
+                   (Vector2){ msgArea.x + (innerW - esz.x) * 0.5f, msgArea.y + (msgArea.height - esz.y) * 0.5f },
+                   12.0f, 0.5f, COL_MUTED);
+    } else if (shownMsgs == 0) {
+        const char *emptyChat = "Belum ada pesan. Mulai obrolan sekarang!";
+        Vector2 esz = MeasureTextEx(fr, emptyChat, 12.0f, 0.5f);
+        DrawTextEx(fr, emptyChat,
+                   (Vector2){ msgArea.x + (innerW - esz.x) * 0.5f, msgArea.y + (msgArea.height - esz.y) * 0.5f },
+                   12.0f, 0.5f, COL_MUTED);
+    }
+    EndScissorMode();
+
+    /* Input Pesan + Tombol Kirim di Bagian Bawah Box */
+    float iy = chatWinRect.y + chatWinRect.height - 46.0f;
+    float sendW = 64.0f;
+
+    bool savedInputBlock = blockActive;
+    blockActive = false;
+
+    bool enter = TextInput(ID_CHAT_INPUT, (Rectangle){ chatWinRect.x + pad, iy, innerW - sendW - 8.0f, 34.0f },
+                           chatInput, MAX_CHAT_LEN,
+                           roomCount > 0 ? "Ketik pesan..." : "Pilih grup/teman dulu...", false);
+
+    if (Button((Rectangle){ chatWinRect.x + pad + innerW - sendW, iy, sendW, 34.0f }, "Kirim", roomCount > 0, COL_PRIMARY) || enter) {
+        if (chatInput[0] != '\0' && roomCount > 0) {
+            /* Jika mengirim DM, daftarkan juga otomatis di kontak penerima */
+            if (strncmp(activeChatKey, "DM:", 3) == 0) {
+                for (int d = 0; d < dmContactCount; d++) {
+                    if (strcmp(dmOwnerNim[d], currentUserNim) == 0) {
+                        char testKey[64];
+                        MakeDmRoomKey(testKey, sizeof testKey, currentUserNim, dmTargetNim[d]);
+                        if (strcmp(testKey, activeChatKey) == 0) {
+                            AddUserDmContact(dmTargetNim[d], currentUserNim);
+                            break;
+                        }
+                    }
+                }
+            }
+            PushChatMessage(activeChatKey, currentUserName, chatInput);
             chatInput[0] = '\0';
         }
     }
+
+    blockActive = savedInputBlock;
+
+    /* Dropdown Pemilih Grup / Kontak DM di Atas Area Chat */
+    if (roomCount > 0) {
+        int prevSel = chatRoomDd.selected;
+        bool savedBlock = blockActive;
+        blockActive = false;
+        Dropdown(&chatRoomDd, (Rectangle){ chatWinRect.x + pad, chatWinRect.y + headerH + 6.0f, innerW, 34.0f },
+                 ddItems, roomCount);
+        blockActive = savedBlock;
+
+        if (chatRoomDd.selected != prevSel && chatRoomDd.selected < roomCount) {
+            snprintf(activeChatKey,   sizeof activeChatKey,   "%s", roomKeys[chatRoomDd.selected]);
+            snprintf(activeChatTitle, sizeof activeChatTitle, "%s", roomLabels[chatRoomDd.selected]);
+        }
+    } else {
+        Rectangle emptyDd = { chatWinRect.x + pad, chatWinRect.y + headerH + 6.0f, innerW, 34.0f };
+        DrawCard(emptyDd, COL_BG, COL_BORDER, 10.0f);
+        DrawTextFit("Belum ada grup atau teman di chat", PX(emptyDd.x + 12), PX(emptyDd.y + 9), 13, PX(innerW - 24), COL_MUTED);
+    }
+
+    /* Grip Resize Segitiga di Pojok Kanan Bawah Box */
+    DrawTriangle((Vector2){ gripRect.x + gripRect.width - 3, gripRect.y + 4 },
+                 (Vector2){ gripRect.x + 4, gripRect.y + gripRect.height - 3 },
+                 (Vector2){ gripRect.x + gripRect.width - 3, gripRect.y + gripRect.height - 3 },
+                 COL_MUTED);
+
+    nextBlockRect = chatWinRect;
+    nextBlockActive = true;
 }
 
 /* ====================================================================== */
@@ -1985,6 +2279,7 @@ void GuiUpdateAndDraw(void)
         authDayDd.open = false;
         authSessionDd.open = false;
         newGroupCourseDd.open = false;
+        chatRoomDd.open = false;
     }
 
     BeginDrawing();
@@ -1993,11 +2288,9 @@ void GuiUpdateAndDraw(void)
     BeginMode2D(GetUiCamera());
 
     if (!isLoggedIn) {
-        /* Alur Awal Sebelum Masuk Dashboard: Splash Screen -> Sign Up / Log In */
         if (currentView == VIEW_AUTH) DrawAuthScreen();
         else                          DrawSplashScreen();
     } else {
-        /* Workspace Utama Setelah Login */
         DrawSidebar();
         switch (currentView) {
             case VIEW_HOME:         DrawHomeScreen();        break;
@@ -2006,9 +2299,9 @@ void GuiUpdateAndDraw(void)
             case VIEW_GROUPS:       DrawGroupsScreen();      break;
             case VIEW_GROUP_DETAIL: DrawGroupDetailScreen(); break;
             case VIEW_GOALS:        DrawGoalsScreen();       break;
-            case VIEW_CHAT:         DrawChatScreen();        break;
             default:                DrawHomeScreen();        break;
         }
+        DrawFloatingChatBox();
     }
 
     DrawToast();

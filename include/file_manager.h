@@ -18,6 +18,7 @@ int         AddBuddy(const StudyBuddy *b);
 int         AddGroup(const Group *g);
 int         AddGoal(const Goal *g);
 int         RemoveGoal(int goalIndex);
+int         AddChatMessage(const ChatMessage *m);
 
 /* Adds a member to an existing group. Returns 1 on success, 0 if full/invalid. */
 int         AddGroupMember(int groupIndex, const char *name);

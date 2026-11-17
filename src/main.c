@@ -18,6 +18,10 @@ Goal       *goals         = NULL;
 int         goalCount     = 0;
 int         goalCapacity  = 0;
 
+ChatMessage *chatLogs     = NULL;
+int          chatCount    = 0;
+int          chatCapacity = 0;
+
 const char *COURSES[COURSE_COUNT] = {
     "Pemrograman C",
     "Basis Data",
