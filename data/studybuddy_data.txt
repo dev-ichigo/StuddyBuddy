@@ -1,25 +1,42 @@
 # StudyBuddy Campus Match data file - edited automatically
-B|Aulia Rahma|2410512001|Pemrograman C|Senin, 13.00 - 15.00
-B|Bima Pratama|2410512015|Basis Data|Selasa, 10.00 - 12.00
-B|Citra Lestari|2410512022|Pemrograman C|Rabu, 13.00 - 15.00
-B|Dimas Saputra|2410512030|Logika Matematika|Kamis, 15.00 - 17.00
-B|Eka Putri|2410512041|Sistem Informasi|Jumat, 08.00 - 10.00
-B|Fajar Nugroho|2410512047|Basis Data|Senin, 15.00 - 17.00
+B|Azdan Fauzi Ramdhan|2610512107|Pemrograman C|Senin, 08.00 - 10.00
+B|Yusuf Putra Santoso|2610512108|Basis Data|Selasa, 10.00 - 12.00
+B|Maria Berliana Waruwu|2610512109|Sistem Informasi|Rabu, 13.00 - 15.00
+B|Alisa Syahirah|2610512110|Logika Matematika|Kamis, 15.00 - 17.00
+B|Muhammad Luthfi Maulana|2610512111|Pemrograman C|Jumat, 08.00 - 10.00
+B|Januar Bahrul Alam|2610512112|Basis Data|Senin, 10.00 - 12.00
 B|Ferdigo Achda Gamis|2610512113|Pemrograman C|Senin, 08.00 - 10.00, 13.00 - 15.00
-B|Fathir Bentala Rasheed|2610512114|Pemrograman C|Rabu, 13.00 - 15.00
-G|C Warriors|Pemrograman C|3|5|Aulia Rahma;Citra Lestari;Fathir Bentala Rasheed
-G|Data Wizards|Basis Data|2|5|Bima Pratama;Fajar Nugroho
-G|Grup Pemrograman C|Pemrograman C|1|5|Ferdigo Achda Gamis
-G|Test 123|Pemrograman C|1|5|Ferdigo Achda Gamis
-G|Test 321|Pemrograman C|1|5|Ferdigo Achda Gamis
-T|2610512113|0|Mastering Pointer & Memory Management in C
+B|Putri Whidya Utami|2610512114|Sistem Informasi|Selasa, 13.00 - 15.00
+B|Sekarani Khalisastia Silaen|2610512115|Logika Matematika|Rabu, 15.00 - 17.00
+B|Muhammad Padli Thohir|2610512116|Pemrograman C|Kamis, 08.00 - 10.00
+B|Muhammad Ikhsan|2610512117|Sistem Informasi|Sabtu, 15.00 - 17.00
+B|Muhammad Rafi Rahid Hakim|2610512118|Basis Data|Jumat, 10.00 - 12.00
+B|Abdullah Azzam|2610512119|Pemrograman C|Sabtu, 13.00 - 15.00
+B|Arthur Bahari Sitoe|2610512120|Sistem Informasi|Senin, 15.00 - 17.00
+B|Zaky Muhammad Alhaf|2610512121|Logika Matematika|Selasa, 18.30 - 20.30
+B|Muhammad Faishal|2610512122|Pemrograman C|Rabu, 08.00 - 10.00
+B|Muhammad Ibrahim|2610512123|Basis Data|Kamis, 10.00 - 12.00
+B|Muhammad Zaki Ar Razi|2610512124|Pemrograman C|Jumat, 13.00 - 15.00
+B|Muhamad Alniko Rasma Amri|2610512125|Sistem Informasi|Senin, 18.30 - 20.30
+B|Zaki Abdul Aziz|2610512126|Logika Matematika|Selasa, 08.00 - 10.00
+B|Jonathan Muller Purba|2610512127|Pemrograman C|Rabu, 10.00 - 12.00
+B|Gabriel Ridho Putra|2610512128|Basis Data|Kamis, 13.00 - 15.00
+B|Ryaas Rasyid Anwar|2610512129|Sistem Informasi|Jumat, 15.00 - 17.00
+B|Maryam Zuhra|2610512130|Logika Matematika|Sabtu, 08.00 - 10.00
+B|Aritama Luqmanul Aqmal|2610512131|Pemrograman C|Senin, 13.00 - 15.00
+B|Nadya Ramadhani|2610512132|Basis Data|Selasa, 15.00 - 17.00
+B|Ira Priskila Lampita|2610512133|Sistem Informasi|Rabu, 18.30 - 20.30
+B|Lowel Klinsman Ramotti Tampubolon|2610512134|Logika Matematika|Kamis, 18.30 - 20.30
+B|Zahrrao Tusshita|2610512136|Pemrograman C|Jumat, 18.30 - 20.30
+B|Amelia Intan Karima|2610512137|Basis Data|Sabtu, 10.00 - 12.00
+B|Nadif Safian|2610512138|Pemrograman C|Minggu, 08.00 - 10.00
+B|Naila Sukmana|2610512139|Sistem Informasi|Minggu, 10.00 - 12.00
+B|Ananda Tri Raihan|2610512140|Logika Matematika|Minggu, 13.00 - 15.00
+G|C Warriors|Pemrograman C|3|5|Ferdigo Achda Gamis;Azdan Fauzi Ramdhan;Aritama Luqmanul Aqmal
+G|Data Wizards|Basis Data|3|5|Yusuf Putra Santoso;Januar Bahrul Alam;Nadya Ramadhani
+G|Logic Masters|Logika Matematika|2|5|Alisa Syahirah;Maryam Zuhra
+G|SI Innovators|Sistem Informasi|2|5|Maria Berliana Waruwu;Putri Whidya Utami
 T|2610512113|0|Menyelesaikan latihan normalisasi Basis Data
 T|2610512113|1|Memahami tabel kebenaran & logika proposisi
-T|2610512113|0|GAK TAU NGAPAIN
-T|2610512114|0|1
-T|2610512114|0|2
-T|2610512114|0|3
-C|G:C Warriors|Aulia Rahma|14:12|Halo semuanya! Ada yang mau bahas latihan pointer malam ini?
-C|G:C Warriors|Citra Lestari|14:16|Gas! Aku masih agak bingung di bagian realloc nih.
-C|DM:2610512113:2610512114|Fathir Bentala Rasheed|Now|Halo Bro
-C|DM:2610512113:2610512114|Ferdigo Achda Gamis|Now|Halo bre
+C|G:C Warriors|Ferdigo Achda Gamis|14:12|Halo semuanya! Ada yang mau bahas latihan pointer malam ini?
+C|G:C Warriors|Azdan Fauzi Ramdhan|14:16|Gas! Aku masih agak bingung di bagian realloc nih.
