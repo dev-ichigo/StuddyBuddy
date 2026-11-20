@@ -93,11 +93,13 @@ typedef enum {
 } WorkflowView;
 
 enum {
-    ID_AUTH_NAME,
+    ID_AUTH_NAME = 1,
     ID_AUTH_NIM,
-    ID_AUTH_SCHED,
-    ID_FIND_SEARCH,
+    ID_BUDDY_SEARCH,
+    ID_BUDDY_COURSE_FILTER,   /* BARU: input filter matkul di popover Find Buddy */
     ID_NEW_GROUP_NAME,
+    ID_NEW_GROUP_COURSE,      /* BARU: input matkul bebas saat buat grup */
+    ID_SCHED_COURSE,          /* BARU: input matkul bebas di Schedule & Courses */
     ID_GOAL_INPUT,
     ID_CHAT_INPUT
 };
@@ -147,10 +149,10 @@ static char currentUserCourse[MAX_MATKUL] = "Pemrograman C";
 static char currentUserSched[MAX_HARI]    = "Senin, 13.00 - 15.00";
 
 /* Auth Form State */
-static bool          isLoginMode   = false;
-static char          authName[MAX_NAMA];
-static char          authNim[MAX_NIM];
-static DropdownState authCourseDd  = { false, 0, 0.0f };
+static bool isLoginMode = false;
+static char authName[MAX_NAMA];
+static char authNim[MAX_NIM];
+
 static const char *DAY_OPTIONS[] = {
     "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"
 };
@@ -165,23 +167,22 @@ static const char *SESSION_OPTIONS[] = {
 };
 #define SESSION_OPTION_COUNT 5
 
-static DropdownState authDayDd     = { false, 0, 0.0f };
-static DropdownState authSessionDd = { false, 0, 0.0f };
-
 /* Find Buddy State */
-static int  findFilter = -1;
-static char findSearch[64];
+static char findSearch[64]              = "";
+static char findCourseFilter[MAX_MATKUL]= "";
+static bool showFindFilterBox           = false;
 
-/* Match Schedule State */
-static int  selectedDayIdx = 1;
-static bool slotChecked[5] = { false, true, true, false, false };
+/* Match Schedule & Courses State */
+static int  selectedDayIdx          = 1;
+static bool slotChecked[5]          = { false, true, true, false, false };
+static char schedCourse[MAX_MATKUL] = "";
 
 /* Group Detail & Create State */
-static int  selectedGroupIdx = 0;
-static bool showCreateGroupModal = false;
-static bool confirmDeleteGroup = false;
-static char newGroupName[MAX_GROUP_NAME];
-static DropdownState newGroupCourseDd = { false, 0, 0.0f };
+static int  selectedGroupIdx            = 0;
+static bool showCreateGroupModal        = false;
+static bool confirmDeleteGroup          = false;
+static char newGroupName[MAX_GROUP_NAME]= "";
+static char newGroupCourse[MAX_MATKUL]  = "";
 
 /* Goals State */
 static char goalInput[MAX_GOAL_DESC];
@@ -236,11 +237,8 @@ static void GoView(WorkflowView v)
 {
     currentView = v;
     focusId = -1;
-    authCourseDd.open = false;
-    authDayDd.open = false;
-    authSessionDd.open = false;
-    newGroupCourseDd.open = false;
     showCreateGroupModal = false;
+    showFindFilterBox = false;
     scrollY[v] = 0.0f;
     confirmDeleteGroup = false;
 
@@ -641,6 +639,12 @@ static void LoginWithBuddyIndex(int idx)
     snprintf(currentUserCourse, sizeof currentUserCourse, "%s", buddies[idx].matkul);
     snprintf(currentUserSched,  sizeof currentUserSched,  "%s", buddies[idx].hari);
 
+    if (strcmp(buddies[idx].matkul, "Belum diatur") != 0) {
+        snprintf(schedCourse, sizeof schedCourse, "%s", buddies[idx].matkul);
+    } else {
+        schedCourse[0] = '\0';
+    }
+
     findPage   = 0;
     groupsPage = 0;
 
@@ -887,13 +891,10 @@ static void HandleAuthSubmit(void)
         memset(&b, 0, sizeof b);
         snprintf(b.nama,   sizeof b.nama,   "%s", authName);
         snprintf(b.nim,    sizeof b.nim,    "%s", authNim);
-        snprintf(b.hari,   sizeof b.hari,   "%s, %s",
-                 DAY_OPTIONS[authDayDd.selected],
-                 SESSION_OPTIONS[authSessionDd.selected]);
-        snprintf(b.matkul, sizeof b.matkul, "%s", COURSES[authCourseDd.selected]);
+        snprintf(b.matkul, sizeof b.matkul, "Belum diatur");
+        snprintf(b.hari,   sizeof b.hari,   "Belum diatur");
         SanitizeText(b.nama);
         SanitizeText(b.nim);
-        SanitizeText(b.hari);
 
         if (b.nama[0] == '\0' || b.nim[0] == '\0') {
             SetStatus("Lengkapi Nama dan NIM kamu terlebih dahulu.", COL_ERR);
@@ -914,7 +915,7 @@ static void HandleAuthSubmit(void)
         Persist();
         LoginWithBuddyIndex(idx);
         char msg[128];
-        snprintf(msg, sizeof msg, "Akun berhasil dibuat! Halo, %s!", currentUserName);
+        snprintf(msg, sizeof msg, "Akun dibuat! Atur matkul & jadwal di Schedule & Courses.", currentUserName);
         SetStatus(msg, COL_OK);
         GoView(VIEW_HOME);
     }
@@ -926,7 +927,7 @@ static void DrawAuthScreen(void)
     float sh = VIRT_H;
 
     float cardW = 470.0f;
-    float cardH = isLoginMode ? 330.0f : 500.0f;
+    float cardH = isLoginMode ? 330.0f : 390.0f;
     Rectangle card = { (sw - cardW) / 2.0f, (sh - cardH) / 2.0f, cardW, cardH };
     DrawCard(card, WHITE, COL_BORDER, 22.0f);
 
@@ -940,7 +941,7 @@ static void DrawAuthScreen(void)
 
     DrawTextBold(isLoginMode ? "Welcome Back!" : "Create Your Account", PX(x), PX(y + 46), 26, PX(w), COL_NAVY);
     DrawTextFit(isLoginMode ? "Masukkan NIM mahasiswa untuk masuk ke dashboard"
-                            : "Lengkapi profilmu agar teman belajar mudah menemukanmu",
+                            : "Daftar cukup dengan Nama & NIM. Atur matkul setelah masuk.",
                 PX(x), PX(y + 78), 14, PX(w), COL_MUTED);
 
     float fy = y + 114;
@@ -959,19 +960,13 @@ static void DrawAuthScreen(void)
         TextInput(ID_AUTH_NAME, (Rectangle){ x, fy + 22, w, 42 }, authName, MAX_NAMA, "Contoh: Sarah Amalia", false);
 
         DrawTextBold("NIM", PX(x), PX(fy + 74), 14, 200, COL_TEXT);
-        TextInput(ID_AUTH_NIM, (Rectangle){ x, fy + 96, w, 42 }, authNim, MAX_NIM, "Hanya angka (contoh: 2610512113)", true);
-
-        DrawTextBold("Mata Kuliah Utama", PX(x), PX(fy + 148), 14, 200, COL_TEXT);
-        DrawTextBold("Jadwal Kosong (Hari & Sesi)", PX(x), PX(fy + 222), 14, 260, COL_TEXT);
-
-        if (Button((Rectangle){ x, fy + 306, w, 46 }, "Sign Up & Masuk", true, COL_PRIMARY)) {
+        if (TextInput(ID_AUTH_NIM, (Rectangle){ x, fy + 96, w, 42 }, authNim, MAX_NIM, "Hanya angka (contoh: 2610512113)", true)) {
             HandleAuthSubmit();
         }
 
-        float halfW = (w - 12.0f) / 2.0f;
-        Dropdown(&authDayDd,     (Rectangle){ x, fy + 244, halfW, 42 }, DAY_OPTIONS, DAY_OPTION_COUNT);
-        Dropdown(&authSessionDd, (Rectangle){ x + halfW + 12.0f, fy + 244, halfW, 42 }, SESSION_OPTIONS, SESSION_OPTION_COUNT);
-        Dropdown(&authCourseDd,  (Rectangle){ x, fy + 170, w, 42 }, COURSES, COURSE_COUNT);
+        if (Button((Rectangle){ x, fy + 162, w, 46 }, "Sign Up & Masuk", true, COL_PRIMARY)) {
+            HandleAuthSubmit();
+        }
     }
 }
 
@@ -984,7 +979,7 @@ static const char *GetCurrentCrumbName(void)
     switch (currentView) {
         case VIEW_HOME:         return "Home";
         case VIEW_FIND_BUDDY:   return "Find Buddy";
-        case VIEW_SCHEDULE:     return "Schedule";
+        case VIEW_SCHEDULE:     return "Schedule & Courses";
         case VIEW_GROUPS:       return "Study Groups";
         case VIEW_GROUP_DETAIL: return "Group Detail";
         case VIEW_GOALS:        return "Learning Goals";
@@ -1217,31 +1212,65 @@ static void DrawHomeScreen(void)
     float popY = leftCard.y + 134.0f;
     DrawTextBold("Popular Courses", PX(leftCard.x + 20), PX(popY), 15, 220, COL_NAVY);
     if (OutlineButton((Rectangle){ leftCard.x + leftW - 104, popY - 4, 86, 26 }, "See all >", WHITE, COL_PRIMARY)) {
-        findFilter = -1;
+        findCourseFilter[0] = '\0';
+        findPage = 0;
         GoView(VIEW_FIND_BUDDY);
     }
 
+    /* Hitung 4 mata kuliah terpopuler secara dinamis dari data buddies[] */
+    /* Hitung 4 mata kuliah terpopuler secara dinamis dari data buddies[] */
+    #define MAX_UNIQUE_COURSES 128
+    char topCourses[MAX_UNIQUE_COURSES][MAX_MATKUL];
+    int  topCounts[MAX_UNIQUE_COURSES];
+    int  uniqueCourses = 0;
+
+    for (int b = 0; b < buddyCount; b++) {
+        if (buddies[b].matkul[0] == '\0' || strcmp(buddies[b].matkul, "Belum diatur") == 0) continue;
+        int foundIdx = -1;
+        for (int u = 0; u < uniqueCourses; u++) {
+            if (strcmp(topCourses[u], buddies[b].matkul) == 0) { foundIdx = u; break; }
+        }
+        if (foundIdx >= 0) {
+            topCounts[foundIdx]++;
+        } else if (uniqueCourses < MAX_UNIQUE_COURSES) {
+            snprintf(topCourses[uniqueCourses], MAX_MATKUL, "%s", buddies[b].matkul);
+            topCounts[uniqueCourses] = 1;
+            uniqueCourses++;
+        }
+    }
+
+    for (int a = 0; a < uniqueCourses - 1; a++) {
+        for (int b = a + 1; b < uniqueCourses; b++) {
+            if (topCounts[b] > topCounts[a]) {
+                int tmpC = topCounts[a]; topCounts[a] = topCounts[b]; topCounts[b] = tmpC;
+                char tmpName[MAX_MATKUL];
+                snprintf(tmpName, sizeof tmpName, "%s", topCourses[a]);
+                snprintf(topCourses[a], MAX_MATKUL, "%s", topCourses[b]);
+                snprintf(topCourses[b], MAX_MATKUL, "%s", tmpName);
+            }
+        }
+    }
+
+    int showCourses = (uniqueCourses > 4) ? 4 : uniqueCourses;
     float pcw = (leftW - 52.0f) / 2.0f;
     float pch = (gridH - 176.0f) / 2.0f;
     if (pch < 56.0f) pch = 56.0f;
 
-    for (int i = 0; i < COURSE_COUNT; i++) {
+    for (int i = 0; i < showCourses; i++) {
         int col = i % 2;
         int row = i / 2;
         Rectangle cr = { leftCard.x + 20 + col * (pcw + 12.0f), popY + 30 + row * (pch + 10.0f), pcw, pch };
         bool hover = MouseOver(cr);
         DrawCard(cr, WHITE, hover ? COL_PRIMARY : COL_BORDER, 13.0f);
 
-        int count = 0;
-        for (int b = 0; b < buddyCount; b++) if (strcmp(buddies[b].matkul, COURSES[i]) == 0) count++;
-
-        DrawTextBold(COURSES[i], PX(cr.x + 14), PX(cr.y + 12), 13, PX(pcw - 28), COL_NAVY);
+        DrawTextBold(topCourses[i], PX(cr.x + 14), PX(cr.y + 12), 13, PX(pcw - 28), COL_NAVY);
         char cstr[48];
-        snprintf(cstr, sizeof cstr, "%d members  |  Active", count);
+        snprintf(cstr, sizeof cstr, "%d members  |  Active", topCounts[i]);
         DrawTextFit(cstr, PX(cr.x + 14), PX(cr.y + 33), 11, PX(pcw - 28), COL_MUTED);
 
         if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-            findFilter = i;
+            snprintf(findCourseFilter, sizeof findCourseFilter, "%s", topCourses[i]);
+            findPage = 0;
             GoView(VIEW_FIND_BUDDY);
         }
     }
@@ -1317,6 +1346,13 @@ static bool ContainsIgnoreCase(const char *haystack, const char *needle)
     return strstr(h, n) != NULL;
 }
 
+static void DrawFilterIcon(float cx, float cy, Color col)
+{
+    DrawLineEx((Vector2){ cx - 7.0f, cy - 4.5f }, (Vector2){ cx + 7.0f, cy - 4.5f }, 2.0f, col);
+    DrawLineEx((Vector2){ cx - 4.5f, cy + 0.0f }, (Vector2){ cx + 4.5f, cy + 0.0f }, 2.0f, col);
+    DrawLineEx((Vector2){ cx - 2.0f, cy + 4.5f }, (Vector2){ cx + 2.0f, cy + 4.5f }, 2.0f, col);
+}
+
 static void DrawFindBuddyScreen(void)
 {
     DrawEditorialHeader("BETTER LEARNING, TOGETHER",
@@ -1330,36 +1366,42 @@ static void DrawFindBuddyScreen(void)
     char prevSearch[64];
     snprintf(prevSearch, sizeof prevSearch, "%s", findSearch);
 
-    TextInput(ID_FIND_SEARCH, (Rectangle){ cx, 128, cw, 40 }, findSearch, sizeof findSearch,
+    float filterBtnSize = 40.0f;
+    float searchW = cw - filterBtnSize - 12.0f;
+    TextInput(ID_BUDDY_SEARCH, (Rectangle){ cx, 128, searchW, 40 }, findSearch, sizeof findSearch,
               "Search name, NIM, or schedule...", false);
 
     if (strcmp(prevSearch, findSearch) != 0) {
         findPage = 0;
     }
 
-    /* Filter Pills */
-    float px = cx;
-    float py = 178.0f;
-    if (PillButton((Rectangle){ px, py, 92, 30 }, "All buddies", findFilter == -1)) {
-        findFilter = -1;
-        findPage = 0;
-    }
-    px += 100.0f;
+    /* Tombol lingkaran filter mata kuliah */
+    Rectangle fBtn = { cx + searchW + 12.0f, 128, filterBtnSize, filterBtnSize };
+    Vector2 fCenter = { fBtn.x + filterBtnSize * 0.5f, fBtn.y + filterBtnSize * 0.5f };
+    bool fHover = CheckCollisionPointCircle(GetUiMouse(), fCenter, filterBtnSize * 0.5f);
+    bool hasFilter = (findCourseFilter[0] != '\0');
 
-    Font f = GetFontReg();
-    for (int i = 0; i < COURSE_COUNT; i++) {
-        float pw = MeasureTextEx(f, COURSES[i], 13.0f, 0.5f).x + 26.0f;
-        if (PillButton((Rectangle){ px, py, pw, 30 }, COURSES[i], findFilter == i)) {
-            findFilter = i;
-            findPage = 0;
-        }
-        px += pw + 8.0f;
+    Color btnFill   = (showFindFilterBox || hasFilter) ? COL_PRIMARY : (fHover ? COL_PRIMARY_LT : WHITE);
+    Color btnBorder = (showFindFilterBox || hasFilter || fHover) ? COL_PRIMARY : COL_BORDER;
+    Color iconCol   = (showFindFilterBox || hasFilter) ? WHITE : COL_PRIMARY;
+
+    DrawCircleV(fCenter, filterBtnSize * 0.5f, btnFill);
+    DrawCircleLines((int)fCenter.x, (int)fCenter.y, filterBtnSize * 0.5f, btnBorder);
+    DrawFilterIcon(fCenter.x, fCenter.y, iconCol);
+
+    if (hasFilter && !showFindFilterBox) {
+        DrawCircleV((Vector2){ fBtn.x + filterBtnSize - 5.0f, fBtn.y + 5.0f }, 4.5f, COL_OK);
+    }
+
+    if (fHover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        showFindFilterBox = !showFindFilterBox;
+        if (showFindFilterBox) focusId = ID_BUDDY_COURSE_FILTER;
     }
 
     int totalMatched = 0;
     for (int i = 0; i < buddyCount; i++) {
         if (strcmp(buddies[i].nim, currentUserNim) == 0) continue;
-        if (findFilter >= 0 && strcmp(buddies[i].matkul, COURSES[findFilter]) != 0) continue;
+        if (!ContainsIgnoreCase(buddies[i].matkul, findCourseFilter)) continue;
         if (!ContainsIgnoreCase(buddies[i].nama, findSearch) &&
             !ContainsIgnoreCase(buddies[i].nim, findSearch) &&
             !ContainsIgnoreCase(buddies[i].hari, findSearch)) continue;
@@ -1374,17 +1416,16 @@ static void DrawFindBuddyScreen(void)
     int startIdx = findPage * FIND_PAGE_SIZE;
     int endIdx   = startIdx + FIND_PAGE_SIZE;
 
-    /* Grid 3 Kolom x 2 Baris Kartu Buddy */
     float gap   = 14.0f;
     float cardW = (cw - 2 * gap) / 3.0f;
-    float cardH = 166.0f;
-    float gridY = 220.0f;
+    float cardH = 176.0f;
+    float gridY = 184.0f;
 
     int matchedIdx = 0;
     int rendered   = 0;
     for (int i = 0; i < buddyCount; i++) {
         if (strcmp(buddies[i].nim, currentUserNim) == 0) continue;
-        if (findFilter >= 0 && strcmp(buddies[i].matkul, COURSES[findFilter]) != 0) continue;
+        if (!ContainsIgnoreCase(buddies[i].matkul, findCourseFilter)) continue;
         if (!ContainsIgnoreCase(buddies[i].nama, findSearch) &&
             !ContainsIgnoreCase(buddies[i].nim, findSearch) &&
             !ContainsIgnoreCase(buddies[i].hari, findSearch)) continue;
@@ -1407,18 +1448,18 @@ static void DrawFindBuddyScreen(void)
             snprintf(nimStr, sizeof nimStr, "NIM %s", buddies[i].nim);
             DrawTextFit(nimStr, PX(card.x + 62), PX(card.y + 37), 11, PX(cardW - 76), COL_MUTED);
 
-            Rectangle chip = { card.x + 14, card.y + 64, cardW - 28, 24 };
+            Rectangle chip = { card.x + 14, card.y + 66, cardW - 28, 24 };
             DrawRectangleRounded(chip, 0.35f, 8, (Color){ 241, 245, 252, 255 });
             DrawTextBold(buddies[i].matkul, PX(chip.x + 10), PX(chip.y + 6), 11, PX(chip.width - 20), COL_PRIMARY);
 
-            DrawTextFit(buddies[i].hari, PX(card.x + 14), PX(card.y + 96), 11, PX(cardW - 28), COL_MUTED);
+            DrawTextFit(buddies[i].hari, PX(card.x + 14), PX(card.y + 98), 11, PX(cardW - 28), COL_MUTED);
 
             float btnW = (cardW - 36.0f) * 0.56f;
             float invW = (cardW - 36.0f) - btnW;
-            if (Button((Rectangle){ card.x + 14, card.y + 122, btnW, 30 }, "Send message", true, COL_PRIMARY)) {
+            if (Button((Rectangle){ card.x + 14, card.y + cardH - 42, btnW, 30 }, "Send message", true, COL_PRIMARY)) {
                 OpenDirectChatWithNim(buddies[i].nim, buddies[i].nama);
             }
-            if (OutlineButton((Rectangle){ card.x + 22 + btnW, card.y + 122, invW, 30 }, "Invite", COL_BORDER, COL_NAVY)) {
+            if (OutlineButton((Rectangle){ card.x + 22 + btnW, card.y + cardH - 42, invW, 30 }, "Invite", COL_BORDER, COL_NAVY)) {
                 char msg[128];
                 snprintf(msg, sizeof msg, "A chat & study invitation was sent to %s!", buddies[i].nama);
                 SetStatus(msg, COL_OK);
@@ -1428,9 +1469,35 @@ static void DrawFindBuddyScreen(void)
     }
 
     if (totalMatched == 0) {
-        DrawTextFit("Tidak ada teman yang cocok dengan filter pencarianmu.", PX(cx), 240, 15, 450, COL_MUTED);
+        DrawTextFit("Tidak ada teman yang cocok dengan filter pencarianmu.", PX(cx), 210, 15, 450, COL_MUTED);
     } else {
         DrawPaginationBar(cx, cw, ContentBottom() - 34.0f, &findPage, totalMatched, FIND_PAGE_SIZE);
+    }
+
+    /* Popover box filter mata kuliah dirender paling akhir agar tampil di atas kartu */
+    if (showFindFilterBox) {
+        float popW = 290.0f;
+        float popH = 122.0f;
+        Rectangle pop = { fBtn.x + filterBtnSize - popW, fBtn.y + filterBtnSize + 8.0f, popW, popH };
+
+        DrawRectangleRounded((Rectangle){ pop.x + 2, pop.y + 4, pop.width, pop.height }, 0.16f, 12, Fade(COL_NAVY, 0.10f));
+        DrawCard(pop, WHITE, COL_PRIMARY, 14.0f);
+
+        DrawTextBold("FILTER FOKUS MATA KULIAH", PX(pop.x + 14), PX(pop.y + 12), 10, 200, COL_MUTED);
+        bool enter = TextInput(ID_BUDDY_COURSE_FILTER, (Rectangle){ pop.x + 14, pop.y + 30, pop.width - 28, 36 },
+                               findCourseFilter, sizeof findCourseFilter, "Ketik nama mata kuliah...", false);
+
+        if (Button((Rectangle){ pop.x + 14, pop.y + 74, 118, 32 }, "Reset", false, COL_MUTED)) {
+            findCourseFilter[0] = '\0';
+            findPage = 0;
+        }
+        if (Button((Rectangle){ pop.x + pop.width - 132, pop.y + 74, 118, 32 }, "Terapkan", true, COL_PRIMARY) || enter) {
+            findPage = 0;
+            showFindFilterBox = false;
+        }
+
+        nextBlockActive = true;
+        nextBlockRect = pop;
     }
 }
 
@@ -1441,16 +1508,28 @@ static void DrawFindBuddyScreen(void)
 static void DrawScheduleScreen(void)
 {
     DrawEditorialHeader("MAKE TIME FOR WHAT MATTERS",
-                        "Match your schedule",
-                        "Pilih 1 hari dan maksimal 2 slot jam kosongmu untuk disimpan.",
+                        "Schedule & Courses",
+                        "Isi fokus mata kuliah dan pilih 1 hari beserta maksimal 2 slot jam kosongmu.",
                         NULL);
 
     float cx = ContentX();
     float cw = ContentW();
 
+    /* Baris input mata kuliah/materi fokus bebas (real-time ke panel rekomendasi) */
+    DrawTextBold("Fokus Mata Kuliah / Materi:", PX(cx), 124, 13, 240, COL_NAVY);
+    TextInput(ID_SCHED_COURSE, (Rectangle){ cx, 144, cw, 40 }, schedCourse, sizeof schedCourse,
+              "Ketik nama mata kuliah atau materi (contoh: Kalkulus, Basis Data, Algoritma)...", false);
+
+    /* Bersihkan spasi ujung sementara untuk pencocokan real-time */
+    char liveCourse[MAX_MATKUL];
+    snprintf(liveCourse, sizeof liveCourse, "%s", schedCourse);
+    SanitizeText(liveCourse);
+    bool hasLiveCourse = (liveCourse[0] != '\0');
+
+    /* Pilihan 7 hari */
     float dayW = (cw - 6 * 10.0f) / 7.0f;
     for (int d = 0; d < DAY_OPTION_COUNT; d++) {
-        Rectangle dr = { cx + d * (dayW + 10.0f), 128, dayW, 46 };
+        Rectangle dr = { cx + d * (dayW + 10.0f), 196, dayW, 42 };
         bool sel = (d == selectedDayIdx);
         bool hover = MouseOver(dr);
         DrawCard(dr, sel ? COL_PRIMARY : (hover ? COL_PRIMARY_LT : WHITE), sel ? COL_PRIMARY : COL_BORDER, 12.0f);
@@ -1474,14 +1553,14 @@ static void DrawScheduleScreen(void)
 
     float leftW  = (cw - 20.0f) * 0.52f;
     float rightW = cw - leftW - 20.0f;
-    float topY   = 190.0f;
+    float topY   = 252.0f;
 
     char slotHeader[64];
     snprintf(slotHeader, sizeof slotHeader, "Available time slots (%d/2):", checkedCount);
     DrawTextBold(slotHeader, PX(cx), PX(topY), 15, 300, COL_NAVY);
 
     for (int s = 0; s < SESSION_OPTION_COUNT; s++) {
-        Rectangle sr = { cx, topY + 28 + s * 50.0f, leftW, 42 };
+        Rectangle sr = { cx, topY + 26 + s * 48.0f, leftW, 40 };
         bool chk = slotChecked[s];
         bool locked = (!chk && checkedCount >= 2);
         bool hover = !locked && MouseOver(sr);
@@ -1491,13 +1570,13 @@ static void DrawScheduleScreen(void)
         Color txtCol = chk ? COL_NAVY : (locked ? COL_DISABLED : COL_TEXT);
 
         DrawCard(sr, cardBg, cardBd, 12.0f);
-        DrawTextFit(SESSION_OPTIONS[s], PX(sr.x + 16), PX(sr.y + 13), 14, PX(leftW - 95), txtCol);
+        DrawTextFit(SESSION_OPTIONS[s], PX(sr.x + 16), PX(sr.y + 12), 14, PX(leftW - 95), txtCol);
 
         if (locked) {
-            DrawTextFit("Locked", PX(sr.x + sr.width - 86), PX(sr.y + 14), 12, 50, COL_DISABLED);
+            DrawTextFit("Locked", PX(sr.x + sr.width - 86), PX(sr.y + 13), 12, 50, COL_DISABLED);
         }
 
-        Rectangle cb = { sr.x + sr.width - 34, sr.y + 10, 22, 22 };
+        Rectangle cb = { sr.x + sr.width - 34, sr.y + 9, 22, 22 };
         DrawRectangleRounded(cb, 0.3f, 6, chk ? COL_PRIMARY : (locked ? (Color){ 220, 225, 235, 255 } : COL_BORDER));
         if (chk) DrawCircle(PX(cb.x + 11), PX(cb.y + 11), 5, WHITE);
 
@@ -1510,39 +1589,67 @@ static void DrawScheduleScreen(void)
     float rx = cx + leftW + 20.0f;
     DrawTextBold("Recommended time together:", PX(rx), PX(topY), 15, 280, COL_NAVY);
 
-    Rectangle matchCard = { rx, topY + 28, rightW, 242 };
+    Rectangle matchCard = { rx, topY + 26, rightW, 234 };
     DrawCard(matchCard, WHITE, COL_BORDER, 16.0f);
 
     char schedTitle[96];
-    snprintf(schedTitle, sizeof schedTitle, "Hari %s  |  Fokus: %s", DAY_OPTIONS[selectedDayIdx], currentUserCourse);
-    DrawTextBold(schedTitle, PX(matchCard.x + 18), PX(matchCard.y + 16), 13, PX(rightW - 36), COL_PRIMARY);
+    snprintf(schedTitle, sizeof schedTitle, "Hari %s  |  Fokus: %s",
+             DAY_OPTIONS[selectedDayIdx],
+             hasLiveCourse ? liveCourse : currentUserCourse);
+    DrawTextBold(schedTitle, PX(matchCard.x + 18), PX(matchCard.y + 14), 13, PX(rightW - 36), COL_PRIMARY);
 
+    /*
+     * Sistem Ranking Real-Time:
+     * Tier 4: Fokus Matkul Cocok + Hari & Semua Slot Cocok
+     * Tier 3: Fokus Matkul Cocok + Hari & Minimal 1 Slot Cocok
+     * Tier 2: Fokus Matkul Cocok (meski hari/jam berbeda, selama user sedang mengetik fokus matkul)
+     * Tier 1 (Fallback): Fokus Matkul Lain, tapi Hari & Minimal 1 Slot Cocok (hanya muncul jika Tier 2-4 kosong)
+     */
     int recIdx[3]  = { -1, -1, -1 };
-    int recPrio[3] = {  0,  0,  0 };
+    int recTier[3] = {  0,  0,  0 };
     int recCount   = 0;
 
-    if (checkedCount > 0) {
-        for (int prio = 2; prio >= 1 && recCount < 3; prio--) {
-            if (prio == 2 && checkedCount < 2) continue;
+    int minTierAllowed = 2; /* Utama: cari yang fokus mata kuliahnya sesuai dulu */
+    for (int pass = 0; pass < 2 && recCount == 0; pass++) {
+        if (pass == 1) minTierAllowed = 1; /* Fallback: jika fokus matkul tidak ditemukan, tampilkan jadwal sama */
 
+        for (int tier = 4; tier >= minTierAllowed && recCount < 3; tier--) {
             for (int i = 0; i < buddyCount && recCount < 3; i++) {
                 if (strcmp(buddies[i].nim, currentUserNim) == 0) continue;
-                if (strstr(buddies[i].hari, DAY_OPTIONS[selectedDayIdx]) == NULL) continue;
 
+                /* Cek apakah buddy sudah masuk daftar */
+                bool alreadyAdded = false;
+                for (int r = 0; r < recCount; r++) {
+                    if (recIdx[r] == i) { alreadyAdded = true; break; }
+                }
+                if (alreadyAdded) continue;
+
+                bool courseMatch = hasLiveCourse &&
+                                   strcmp(buddies[i].matkul, "Belum diatur") != 0 &&
+                                   ContainsIgnoreCase(buddies[i].matkul, liveCourse);
+
+                bool dayMatch = (strstr(buddies[i].hari, DAY_OPTIONS[selectedDayIdx]) != NULL);
                 int slotMatches = 0;
-                for (int k = 0; k < checkedCount; k++) {
-                    if (activeSlots[k] >= 0 && strstr(buddies[i].hari, SESSION_OPTIONS[activeSlots[k]]) != NULL) {
-                        slotMatches++;
+                if (dayMatch && checkedCount > 0) {
+                    for (int k = 0; k < checkedCount; k++) {
+                        if (activeSlots[k] >= 0 && strstr(buddies[i].hari, SESSION_OPTIONS[activeSlots[k]]) != NULL) {
+                            slotMatches++;
+                        }
                     }
                 }
 
-                int buddyPrio = 0;
-                if (checkedCount == 2 && slotMatches == 2) buddyPrio = 2;
-                else if (slotMatches >= 1)                 buddyPrio = 1;
+                int bTier = 0;
+                if (courseMatch) {
+                    if (checkedCount == 2 && slotMatches == 2) bTier = 4;
+                    else if (slotMatches >= 1)                 bTier = 3;
+                    else                                       bTier = 2;
+                } else if (slotMatches >= 1) {
+                    bTier = 1; /* Fokus lain dengan hari & slot jam yang sama */
+                }
 
-                if (buddyPrio == prio) {
+                if (bTier == tier) {
                     recIdx[recCount]  = i;
-                    recPrio[recCount] = buddyPrio;
+                    recTier[recCount] = bTier;
                     recCount++;
                 }
             }
@@ -1550,33 +1657,52 @@ static void DrawScheduleScreen(void)
     }
 
     if (recCount == 0) {
-        const char *emptyMsg = "Belum ada teman dengan hari & jam yang cocok.";
+        const char *emptyMsg = "Belum ada teman dengan fokus atau jadwal yang cocok.";
         Font fr = GetFontReg();
         Vector2 tsz = MeasureTextEx(fr, emptyMsg, 13.0f, 0.5f);
         float centerX = matchCard.x + (rightW - tsz.x) * 0.5f;
         if (centerX < matchCard.x + 18.0f) centerX = matchCard.x + 18.0f;
-        DrawTextFit(emptyMsg, PX(centerX), PX(matchCard.y + 104), 13, PX(rightW - 36), COL_MUTED);
+        DrawTextFit(emptyMsg, PX(centerX), PX(matchCard.y + 100), 13, PX(rightW - 36), COL_MUTED);
     } else {
         for (int m = 0; m < recCount; m++) {
             int bi = recIdx[m];
-            float my = matchCard.y + 48 + m * 44.0f;
+            float my = matchCard.y + 44 + m * 43.0f;
 
             DrawAvatar(matchCard.x + 32, my + 14, 14, buddies[bi].nama, COL_PRIMARY_LT, COL_NAVY);
-            DrawTextBold(buddies[bi].nama, PX(matchCard.x + 54), PX(my + 2), 13, PX(rightW - 145), COL_TEXT);
-            DrawTextFit(buddies[bi].hari,  PX(matchCard.x + 54), PX(my + 19), 11, PX(rightW - 145), COL_MUTED);
+            DrawTextBold(buddies[bi].nama, PX(matchCard.x + 54), PX(my + 2), 13, PX(rightW - 155), COL_TEXT);
 
-            const char *badgeTxt = (recPrio[m] == 2) ? "Best Match" : "1 Slot Cocok";
-            Color badgeBg = (recPrio[m] == 2) ? TILE_MINT_BG : COL_PRIMARY_LT;
-            Color badgeFg = (recPrio[m] == 2) ? COL_OK       : COL_PRIMARY;
+            char subMeta[140];
+            snprintf(subMeta, sizeof subMeta, "%s  |  %s", buddies[bi].matkul, buddies[bi].hari);
+            DrawTextFit(subMeta, PX(matchCard.x + 54), PX(my + 19), 11, PX(rightW - 155), COL_MUTED);
 
-            Rectangle badge = { matchCard.x + rightW - 96, my + 6, 80, 22 };
+            const char *badgeTxt = "Jadwal Sama";
+            Color badgeBg = TILE_AMBER_BG;
+            Color badgeFg = TILE_AMBER_FG;
+
+            if (recTier[m] == 4) {
+                badgeTxt = "Best Match";
+                badgeBg  = TILE_MINT_BG;
+                badgeFg  = COL_OK;
+            } else if (recTier[m] == 3) {
+                badgeTxt = "Matkul & Slot";
+                badgeBg  = TILE_MINT_BG;
+                badgeFg  = COL_OK;
+            } else if (recTier[m] == 2) {
+                badgeTxt = "Matkul Sama";
+                badgeBg  = COL_PRIMARY_LT;
+                badgeFg  = COL_PRIMARY;
+            }
+
+            Rectangle badge = { matchCard.x + rightW - 104, my + 6, 88, 22 };
             DrawRectangleRounded(badge, 0.5f, 8, badgeBg);
-            DrawTextBold(badgeTxt, PX(badge.x + 8), PX(badge.y + 5), 11, 68, badgeFg);
+            DrawTextBold(badgeTxt, PX(badge.x + 8), PX(badge.y + 5), 11, 76, badgeFg);
         }
     }
 
-    if (Button((Rectangle){ matchCard.x + 18, matchCard.y + 188, rightW - 36, 38 }, "Save availability", true, COL_PRIMARY)) {
-        if (checkedCount == 0) {
+    if (Button((Rectangle){ matchCard.x + 18, matchCard.y + 182, rightW - 36, 38 }, "Save course & availability", true, COL_PRIMARY)) {
+        if (!hasLiveCourse) {
+            SetStatus("Isi fokus mata kuliah / materi terlebih dahulu!", COL_ERR);
+        } else if (checkedCount == 0) {
             SetStatus("Pilih minimal 1 slot jam kosong terlebih dahulu!", COL_ERR);
         } else {
             char newSched[MAX_HARI];
@@ -1591,16 +1717,17 @@ static void DrawScheduleScreen(void)
                 }
             }
 
-            snprintf(currentUserSched, sizeof currentUserSched, "%s", newSched);
+            snprintf(currentUserCourse, sizeof currentUserCourse, "%s", liveCourse);
+            snprintf(currentUserSched,  sizeof currentUserSched,  "%s", newSched);
             if (loggedBuddyIdx >= 0 && loggedBuddyIdx < buddyCount) {
-                snprintf(buddies[loggedBuddyIdx].hari, sizeof buddies[loggedBuddyIdx].hari, "%s", newSched);
+                snprintf(buddies[loggedBuddyIdx].matkul, sizeof buddies[loggedBuddyIdx].matkul, "%s", liveCourse);
+                snprintf(buddies[loggedBuddyIdx].hari,   sizeof buddies[loggedBuddyIdx].hari,   "%s", newSched);
                 Persist();
             }
-            SetStatus("Your availability has been saved!", COL_OK);
+            SetStatus("Mata kuliah & jadwal kosong berhasil disimpan!", COL_OK);
         }
     }
 }
-
 /* ====================================================================== */
 /* SCREEN 6 & 7: Study Groups & Group Detail                              */
 /* ====================================================================== */
@@ -1618,40 +1745,55 @@ static void DrawGroupsScreen(void)
     if (Button((Rectangle){ cx + cw - 156, 68, 156, 36 }, "+ Create Group", true, COL_PRIMARY)) {
         showCreateGroupModal = !showCreateGroupModal;
         newGroupName[0] = '\0';
-        newGroupCourseDd.open = false;
+        if (strcmp(currentUserCourse, "Belum diatur") != 0) {
+            snprintf(newGroupCourse, sizeof newGroupCourse, "%s", currentUserCourse);
+        } else {
+            newGroupCourse[0] = '\0';
+        }
     }
 
     float listTop = 128.0f;
-    float inputW  = cw - 380.0f;
-    if (inputW < 150.0f) inputW = 150.0f;
+    float usableW = cw - 168.0f;
+    float nameW   = usableW * 0.52f;
+    float courseW = usableW - nameW - 12.0f;
 
     if (showCreateGroupModal) {
         Rectangle box = { cx, 128, cw, 60 };
         DrawCard(box, WHITE, COL_PRIMARY, 14.0f);
 
-        TextInput(ID_NEW_GROUP_NAME, (Rectangle){ box.x + 12, box.y + 10, inputW, 40 },
+        TextInput(ID_NEW_GROUP_NAME, (Rectangle){ box.x + 12, box.y + 10, nameW, 40 },
                   newGroupName, MAX_GROUP_NAME, "Nama grup baru...", false);
 
-        if (Button((Rectangle){ box.x + inputW + 236, box.y + 10, 132, 40 }, "Buat Grup", true, COL_OK)) {
-            Group g;
-            memset(&g, 0, sizeof g);
-            snprintf(g.namaGroup, sizeof g.namaGroup, "%s", newGroupName);
-            SanitizeText(g.namaGroup);
-            if (g.namaGroup[0] == '\0') snprintf(g.namaGroup, sizeof g.namaGroup, "Grup %s", COURSES[newGroupCourseDd.selected]);
-            snprintf(g.matkul, sizeof g.matkul, "%s", COURSES[newGroupCourseDd.selected]);
-            g.maxAnggota = MAX_GROUP_MEMBERS;
+        TextInput(ID_NEW_GROUP_COURSE, (Rectangle){ box.x + 12 + nameW + 12, box.y + 10, courseW, 40 },
+                  newGroupCourse, MAX_MATKUL, "Mata kuliah fokus...", false);
 
-            int idx = AddGroup(&g);
-            if (idx >= 0) {
-                AddGroupMember(idx, currentUserName);
-                Persist();
-                showCreateGroupModal = false;
-                newGroupCourseDd.open = false;
-                selectedGroupIdx = idx;
-                groupsPage = idx / GROUPS_PAGE_SIZE;
-                SetStatus("Your study group has been created!", COL_OK);
-                GoView(VIEW_GROUP_DETAIL);
-                return;
+        if (Button((Rectangle){ box.x + cw - 144, box.y + 10, 132, 40 }, "Buat Grup", true, COL_OK)) {
+            char cleanCourse[MAX_MATKUL];
+            snprintf(cleanCourse, sizeof cleanCourse, "%s", newGroupCourse);
+            SanitizeText(cleanCourse);
+
+            if (cleanCourse[0] == '\0') {
+                SetStatus("Isi mata kuliah fokus grup terlebih dahulu.", COL_ERR);
+            } else {
+                Group g;
+                memset(&g, 0, sizeof g);
+                snprintf(g.namaGroup, sizeof g.namaGroup, "%s", newGroupName);
+                SanitizeText(g.namaGroup);
+                if (g.namaGroup[0] == '\0') snprintf(g.namaGroup, sizeof g.namaGroup, "Grup %s", cleanCourse);
+                snprintf(g.matkul, sizeof g.matkul, "%s", cleanCourse);
+                g.maxAnggota = MAX_GROUP_MEMBERS;
+
+                int idx = AddGroup(&g);
+                if (idx >= 0) {
+                    AddGroupMember(idx, currentUserName);
+                    Persist();
+                    showCreateGroupModal = false;
+                    selectedGroupIdx = idx;
+                    groupsPage = idx / GROUPS_PAGE_SIZE;
+                    SetStatus("Your study group has been created!", COL_OK);
+                    GoView(VIEW_GROUP_DETAIL);
+                    return;
+                }
             }
         }
         listTop = 200.0f;
@@ -1659,9 +1801,6 @@ static void DrawGroupsScreen(void)
 
     if (groupCount == 0) {
         DrawTextFit("Belum ada grup belajar. Klik '+ Create Group' di kanan atas!", PX(cx), PX(listTop + 20), 15, 480, COL_MUTED);
-        if (showCreateGroupModal) {
-            Dropdown(&newGroupCourseDd, (Rectangle){ cx + inputW + 20, 138, 206, 40 }, COURSES, COURSE_COUNT);
-        }
         return;
     }
 
@@ -1717,11 +1856,6 @@ static void DrawGroupsScreen(void)
     }
 
     DrawPaginationBar(cx, cw, ContentBottom() - 34.0f, &groupsPage, groupCount, GROUPS_PAGE_SIZE);
-
-    /* Render dropdown paling akhir agar tampil di atas kartu grup & blok klik di belakangnya */
-    if (showCreateGroupModal) {
-        Dropdown(&newGroupCourseDd, (Rectangle){ cx + inputW + 20, 138, 206, 40 }, COURSES, COURSE_COUNT);
-    }
 }
 
 static void DrawGroupDetailScreen(void)
@@ -2358,12 +2492,9 @@ void GuiUpdateAndDraw(void)
     nextBlockActive = false;
 
     if (focusId < 0) { while (GetCharPressed() > 0) {} }
-    if (IsKeyPressed(KEY_ESCAPE)) {
+   if (IsKeyPressed(KEY_ESCAPE)) {
         focusId = -1;
-        authCourseDd.open = false;
-        authDayDd.open = false;
-        authSessionDd.open = false;
-        newGroupCourseDd.open = false;
+        showFindFilterBox = false;
         chatRoomDd.open = false;
     }
 
