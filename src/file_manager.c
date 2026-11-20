@@ -147,6 +147,25 @@ int AddChatMessage(const ChatMessage *m)
     return chatCount++;
 }
 
+int AddGroupInvite(const GroupInvite *inv)
+{
+    void *p = groupInvites;
+    if (!EnsureCapacity(&p, &inviteCapacity, inviteCount, sizeof(GroupInvite))) return -1;
+    groupInvites = (GroupInvite *)p;
+    groupInvites[inviteCount] = *inv;
+    return inviteCount++;
+}
+
+int RemoveGroupInvite(int inviteIndex)
+{
+    if (inviteIndex < 0 || inviteIndex >= inviteCount) return 0;
+    for (int i = inviteIndex; i < inviteCount - 1; i++) {
+        groupInvites[i] = groupInvites[i + 1];
+    }
+    inviteCount--;
+    return 1;
+}
+
 int RemoveGoal(int goalIndex)
 {
     if (goalIndex < 0 || goalIndex >= goalCount) return 0;
@@ -245,8 +264,9 @@ int SaveData(void)
     fprintf(f, "# StudyBuddy Campus Match data file - edited automatically\n");
 
     for (int i = 0; i < buddyCount; i++) {
-        fprintf(f, "B|%s|%s|%s|%s\n",
-                buddies[i].nama, buddies[i].nim, buddies[i].matkul, buddies[i].hari);
+        fprintf(f, "B|%s|%s|%s|%s|%s\n",
+                buddies[i].nama, buddies[i].nim, buddies[i].matkul,
+                buddies[i].hari, buddies[i].password);
     }
 
     for (int i = 0; i < groupCount; i++) {
@@ -267,6 +287,11 @@ int SaveData(void)
         fprintf(f, "C|%s|%s|%s|%s\n",
                 chatLogs[i].roomKey, chatLogs[i].sender,
                 chatLogs[i].timeStr, chatLogs[i].text);
+    }
+
+    for (int i = 0; i < inviteCount; i++) {
+        fprintf(f, "I|%s|%s|%s\n",
+                groupInvites[i].groupName, groupInvites[i].senderName, groupInvites[i].targetNim);
     }
 
     return fclose(f) == 0;
@@ -290,10 +315,11 @@ int LoadData(void)
         if (strcmp(fld[0], "B") == 0 && n >= 5) {
             StudyBuddy b;
             memset(&b, 0, sizeof b);
-            snprintf(b.nama,   sizeof b.nama,   "%s", fld[1]);
-            snprintf(b.nim,    sizeof b.nim,    "%s", fld[2]);
-            snprintf(b.matkul, sizeof b.matkul, "%s", fld[3]);
-            snprintf(b.hari,   sizeof b.hari,   "%s", fld[4]);
+            snprintf(b.nama,     sizeof b.nama,     "%s", fld[1]);
+            snprintf(b.nim,      sizeof b.nim,      "%s", fld[2]);
+            snprintf(b.matkul,   sizeof b.matkul,   "%s", fld[3]);
+            snprintf(b.hari,     sizeof b.hari,     "%s", fld[4]);
+            snprintf(b.password, sizeof b.password, "%s", (n >= 6 && fld[5][0] != '\0') ? fld[5] : "123456");
             if (AddBuddy(&b) >= 0) loaded++;
 
         } else if (strcmp(fld[0], "G") == 0 && n >= 6) {
@@ -338,6 +364,14 @@ int LoadData(void)
             snprintf(cm.timeStr, sizeof cm.timeStr, "%s", fld[3]);
             snprintf(cm.text,    sizeof cm.text,    "%s", fld[4]);
             if (AddChatMessage(&cm) >= 0) loaded++;
+
+        } else if (strcmp(fld[0], "I") == 0 && n >= 4) {
+            GroupInvite inv;
+            memset(&inv, 0, sizeof inv);
+            snprintf(inv.groupName,  sizeof inv.groupName,  "%s", fld[1]);
+            snprintf(inv.senderName, sizeof inv.senderName, "%s", fld[2]);
+            snprintf(inv.targetNim,  sizeof inv.targetNim,  "%s", fld[3]);
+            if (AddGroupInvite(&inv) >= 0) loaded++;
         }
     }
 
@@ -360,4 +394,5 @@ void FreeData(void)
     free(groups);   groups   = NULL; groupCount = 0; groupCapacity = 0;
     free(goals);    goals    = NULL; goalCount  = 0; goalCapacity  = 0;
     free(chatLogs); chatLogs = NULL; chatCount  = 0; chatCapacity  = 0;
+    free(groupInvites); groupInvites = NULL; inviteCount = 0; inviteCapacity = 0;
 }

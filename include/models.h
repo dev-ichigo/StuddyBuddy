@@ -4,6 +4,7 @@
 /* ---------- Limits ---------- */
 #define MAX_NAMA           50
 #define MAX_NIM            15
+#define MAX_PASS           32
 #define MAX_MATKUL         30
 #define MAX_HARI           100
 #define MAX_GROUP_NAME     40
@@ -25,6 +26,7 @@ typedef struct {
 typedef struct {
     char nama[MAX_NAMA];
     char nim[MAX_NIM];
+    char password[MAX_PASS];    // <-- TAMBAH
     char matkul[MAX_MATKUL];
     char hari[MAX_HARI];
 } StudyBuddy;
@@ -36,6 +38,12 @@ typedef struct {
     int  maxAnggota;
     char anggotaNama[MAX_GROUP_MEMBERS][MAX_NAMA];
 } Group;
+
+typedef struct {                // <-- TAMBAH STRUCT INI
+    char groupName[MAX_GROUP_NAME];
+    char senderName[MAX_NAMA];
+    char targetNim[MAX_NIM];
+} GroupInvite;
 
 typedef struct {
     char nimPemilik[MAX_NIM];
@@ -56,6 +64,10 @@ extern int         buddyCapacity;
 extern Group      *groups;
 extern int         groupCount;
 extern int         groupCapacity;
+
+extern GroupInvite *groupInvites;   // <-- TAMBAH
+extern int          inviteCount;    // <-- TAMBAH
+extern int          inviteCapacity; // <-- TAMBAH
 
 extern Goal       *goals;
 extern int         goalCount;
