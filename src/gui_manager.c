@@ -89,22 +89,26 @@ typedef enum {
     VIEW_GROUPS,        /* Study Groups List */
     VIEW_GROUP_DETAIL,  /* Group Detail & Join */
     VIEW_GOALS,         /* Learning Goals */
+    VIEW_SETTINGS,      /* Account Settings & Theme */
     VIEW_COUNT
 } WorkflowView;
 
 enum {
     ID_AUTH_NAME = 1,
     ID_AUTH_NIM,
-    ID_AUTH_PASS,             // <-- TAMBAH
-    ID_AUTH_CONFIRM,          // <-- TAMBAH
+    ID_AUTH_PASS,
+    ID_AUTH_CONFIRM,
     ID_BUDDY_SEARCH,
     ID_BUDDY_COURSE_FILTER,
     ID_NEW_GROUP_NAME,
     ID_NEW_GROUP_COURSE,
-    ID_INVITE_SEARCH,         // <-- TAMBAH
+    ID_INVITE_SEARCH,
     ID_SCHED_COURSE,
     ID_GOAL_INPUT,
-    ID_CHAT_INPUT
+    ID_CHAT_INPUT,
+    ID_SET_OLD_PASS,
+    ID_SET_NEW_PASS,
+    ID_SET_CONF_PASS
 };
 
 typedef struct {
@@ -129,7 +133,8 @@ static char          activeChatKey[64]   = "";
 static char          activeChatTitle[64] = "Pilih Chat";
 static DropdownState chatRoomDd      = { false, 0, 0.0f };
 
-/* Daftar kontak DM yang pernah dibuka khusus per-user */static char          dmOwnerNim[MAX_DM_CONTACTS][MAX_NIM];
+/* Daftar kontak DM yang pernah dibuka khusus per-user */
+static char          dmOwnerNim[MAX_DM_CONTACTS][MAX_NIM];
 static char          dmTargetNim[MAX_DM_CONTACTS][MAX_NIM];
 static int           dmContactCount  = 0;
 
@@ -142,6 +147,11 @@ static Font fontBold    = { 0 };
 
 static WorkflowView currentView = VIEW_SPLASH;
 static int          focusId     = -1;
+static bool         isDarkMode  = false;
+
+static char         setOldPass[MAX_PASS]  = "";
+static char         setNewPass[MAX_PASS]  = "";
+static char         setConfPass[MAX_PASS] = "";
 
 /* Active Logged-in User Session */
 static bool isLoggedIn     = false;
@@ -246,12 +256,37 @@ static void GoView(WorkflowView v)
     focusId = -1;
     showCreateGroupModal = false;
     showFindFilterBox = false;
-    showInviteModal = false; // <-- TAMBAH
+    showInviteModal = false;
     scrollY[v] = 0.0f;
     confirmDeleteGroup = false;
 
     viewAnimAlpha = 1.0f;
     viewAnimY     = 0.0f;
+}
+
+static Color ThemeBg(void)       { return isDarkMode ? (Color){  15,  23,  42, 255 } : COL_BG; }
+static Color ThemeSurface(void)  { return isDarkMode ? (Color){  30,  41,  59, 255 } : WHITE; }
+static Color ThemeSurface2(void) { return isDarkMode ? (Color){  39,  52,  73, 255 } : (Color){ 247, 249, 253, 255 }; }
+static Color ThemeBorder(void)   { return isDarkMode ? (Color){  51,  65,  85, 255 } : COL_BORDER; }
+static Color ThemeInk(void)      { return isDarkMode ? (Color){ 241, 245, 249, 255 } : COL_NAVY; }
+static Color ThemeMuted(void)    { return isDarkMode ? (Color){ 148, 163, 184, 255 } : COL_MUTED; }
+static Color ThemeHoverLt(void)  { return isDarkMode ? (Color){  36,  54,  88, 255 } : COL_PRIMARY_LT; }
+
+static bool ColorEq(Color a, Color b)
+{
+    return (a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a);
+}
+
+static void DrawGearIcon(float cx, float cy, float r, Color col, Color holeCol)
+{
+    for (int i = 0; i < 8; i++) {
+        float ang = (float)i * (PI / 4.0f);
+        Vector2 p1 = { cx + cosf(ang) * (r * 0.65f), cy + sinf(ang) * (r * 0.65f) };
+        Vector2 p2 = { cx + cosf(ang) * (r * 1.15f), cy + sinf(ang) * (r * 1.15f) };
+        DrawLineEx(p1, p2, 2.3f, col);
+    }
+    DrawCircleV((Vector2){ cx, cy }, r * 0.78f, col);
+    DrawCircleV((Vector2){ cx, cy }, r * 0.34f, holeCol);
 }
 
 static void DrawAnimatedBackground(bool isAuthStage)
@@ -261,37 +296,56 @@ static void DrawAnimatedBackground(bool isAuthStage)
     float t  = (float)GetTime();
 
     if (isAuthStage) {
-        DrawRectangleGradientV(0, 0, (int)sw + 2, (int)sh + 2,
-                               (Color){ 234, 242, 255, 255 },
-                               (Color){ 248, 251, 255, 255 });
+        if (isDarkMode) {
+            DrawRectangleGradientV(0, 0, (int)sw + 2, (int)sh + 2,
+                                   (Color){ 12, 19, 34, 255 },
+                                   (Color){ 20, 30, 52, 255 });
+        } else {
+            DrawRectangleGradientV(0, 0, (int)sw + 2, (int)sh + 2,
+                                   (Color){ 234, 242, 255, 255 },
+                                   (Color){ 248, 251, 255, 255 });
+        }
 
         float bob1 = sinf(t * 1.1f) * 14.0f;
         float bob2 = cosf(t * 0.9f) * 16.0f;
         float bob3 = sinf(t * 1.4f + 1.0f) * 10.0f;
 
-        DrawCircleV((Vector2){ sw * 0.14f, sh * 0.92f + bob1 }, 225.0f, Fade(TILE_BLUE_BG, 0.95f));
-        DrawCircleV((Vector2){ sw * 0.86f, sh * 0.12f + bob2 }, 185.0f, Fade(TILE_AMBER_BG, 0.90f));
-        DrawCircleV((Vector2){ sw * 0.84f, sh * 0.85f + bob3 }, 110.0f, Fade(TILE_MINT_BG, 0.75f));
-        DrawCircleV((Vector2){ sw * 0.16f, sh * 0.18f - bob3 },  75.0f, Fade(TILE_PINK_BG, 0.70f));
+        float aScale = isDarkMode ? 0.14f : 1.0f;
+        DrawCircleV((Vector2){ sw * 0.14f, sh * 0.92f + bob1 }, 225.0f, Fade(TILE_BLUE_BG, 0.95f * aScale));
+        DrawCircleV((Vector2){ sw * 0.86f, sh * 0.12f + bob2 }, 185.0f, Fade(TILE_AMBER_BG, 0.90f * aScale));
+        DrawCircleV((Vector2){ sw * 0.84f, sh * 0.85f + bob3 }, 110.0f, Fade(TILE_MINT_BG, 0.75f * aScale));
+        DrawCircleV((Vector2){ sw * 0.16f, sh * 0.18f - bob3 },  75.0f, Fade(TILE_PINK_BG, 0.70f * aScale));
 
         DrawCircleLines((int)(sw * 0.5f), (int)(sh * 0.5f), 275.0f + sinf(t * 1.5f) * 6.0f,
                         Fade(COL_PRIMARY, 0.12f));
     } else {
         float wx = (float)SIDEBAR_W;
         float ww = sw - wx;
-        DrawRectangleGradientV((int)wx, 0, (int)ww + 2, (int)sh + 2,
-                               (Color){ 242, 246, 253, 255 },
-                               (Color){ 247, 249, 255, 255 });
+        if (isDarkMode) {
+            DrawRectangleGradientV((int)wx, 0, (int)ww + 2, (int)sh + 2,
+                                   (Color){ 15, 23, 42, 255 },
+                                   (Color){ 20, 30, 52, 255 });
+        } else {
+            DrawRectangleGradientV((int)wx, 0, (int)ww + 2, (int)sh + 2,
+                                   (Color){ 242, 246, 253, 255 },
+                                   (Color){ 247, 249, 255, 255 });
+        }
 
         float drift = sinf(t * 0.8f) * 8.0f;
-        DrawCircleV((Vector2){ sw - 35.0f, 35.0f + drift }, 150.0f, Fade(TILE_BLUE_BG, 0.75f));
-        DrawCircleV((Vector2){ sw - 85.0f, sh - 20.0f - drift }, 185.0f, Fade(TILE_MINT_BG, 0.45f));
-        DrawCircleV((Vector2){ wx + 55.0f, sh - 25.0f + drift }, 115.0f, Fade(TILE_AMBER_BG, 0.40f));
+        float aScale = isDarkMode ? 0.12f : 1.0f;
+        DrawCircleV((Vector2){ sw - 35.0f, 35.0f + drift }, 150.0f, Fade(TILE_BLUE_BG, 0.75f * aScale));
+        DrawCircleV((Vector2){ sw - 85.0f, sh - 20.0f - drift }, 185.0f, Fade(TILE_MINT_BG, 0.45f * aScale));
+        DrawCircleV((Vector2){ wx + 55.0f, sh - 25.0f + drift }, 115.0f, Fade(TILE_AMBER_BG, 0.40f * aScale));
     }
 }
 
 static void DrawCard(Rectangle r, Color fill, Color border, float radiusPx)
 {
+    if (isDarkMode) {
+        if (ColorEq(fill, WHITE))        fill   = ThemeSurface();
+        if (ColorEq(border, COL_BORDER)) border = ThemeBorder();
+    }
+
     float minSide = (r.width < r.height) ? r.width : r.height;
     float roundness = (minSide > 0) ? (radiusPx * 2.0f) / minSide : 0.1f;
     if (roundness > 1.0f) roundness = 1.0f;
@@ -303,6 +357,11 @@ static void DrawCard(Rectangle r, Color fill, Color border, float radiusPx)
 
 static void DrawTextStyle(Font f, const char *text, int x, int y, int size, int maxW, Color c)
 {
+    if (isDarkMode) {
+        if (ColorEq(c, COL_NAVY) || ColorEq(c, COL_TEXT)) c = ThemeInk();
+        else if (ColorEq(c, COL_MUTED))                   c = ThemeMuted();
+    }
+
     char buf[220];
     snprintf(buf, sizeof buf, "%s", text);
 
@@ -426,7 +485,12 @@ static bool Button(Rectangle r, const char *label, bool enabled, Color base)
 static bool OutlineButton(Rectangle r, const char *label, Color borderCol, Color textCol)
 {
     bool hover = MouseOver(r);
-    DrawCard(r, hover ? COL_PRIMARY_LT : WHITE, borderCol, r.height * 0.38f);
+    if (isDarkMode) {
+        if (ColorEq(borderCol, COL_BORDER)) borderCol = ThemeBorder();
+        else if (ColorEq(borderCol, WHITE)) borderCol = ThemeSurface();
+        if (ColorEq(textCol, COL_NAVY) || ColorEq(textCol, COL_TEXT)) textCol = ThemeInk();
+    }
+    DrawCard(r, hover ? ThemeHoverLt() : ThemeSurface(), borderCol, r.height * 0.38f);
 
     Font f = GetFontBold();
     float fsize = (r.height <= 32.0f) ? 12.0f : 14.0f;
@@ -907,17 +971,18 @@ static void DrawSplashScreen(void)
 
     const char *brand = "StudyBuddy";
     Vector2 bsz = MeasureTextEx(fb, brand, 34.0f, 0.5f);
-    DrawTextEx(fb, brand, (Vector2){ card.x + (cardW - bsz.x) / 2.0f, card.y + 130 }, 34.0f, 0.5f, COL_NAVY);
+    DrawTextEx(fb, brand, (Vector2){ card.x + (cardW - bsz.x) / 2.0f, card.y + 130 }, 34.0f, 0.5f, ThemeInk());
 
     const char *tag = "Find Your Study Match";
     Vector2 tsz = MeasureTextEx(fr, tag, 16.0f, 0.5f);
-    DrawTextEx(fr, tag, (Vector2){ card.x + (cardW - tsz.x) / 2.0f, card.y + 170 }, 16.0f, 0.5f, COL_MUTED);
+    DrawTextEx(fr, tag, (Vector2){ card.x + (cardW - tsz.x) / 2.0f, card.y + 170 }, 16.0f, 0.5f, ThemeMuted());
 
     Rectangle pill = { card.x + 48, card.y + 210, cardW - 96, 62 };
-    DrawRectangleRounded(pill, 0.3f, 12, COL_PRIMARY_LT);
+    DrawRectangleRounded(pill, 0.3f, 12, ThemeHoverLt());
     const char *quote = "Better Learning Together  |  Study Smarter";
     Vector2 qsz = MeasureTextEx(fb, quote, 14.0f, 0.5f);
-    DrawTextEx(fb, quote, (Vector2){ pill.x + (pill.width - qsz.x) / 2.0f, pill.y + 23 }, 14.0f, 0.5f, COL_PRIMARY);
+    Color quoteCol = isDarkMode ? (Color){ 147, 197, 253, 255 } : COL_PRIMARY;
+    DrawTextEx(fb, quote, (Vector2){ pill.x + (pill.width - qsz.x) / 2.0f, pill.y + 23 }, 14.0f, 0.5f, quoteCol);
 
     if (Button((Rectangle){ card.x + 48, card.y + 296, cardW - 96, 48 }, "Get Started", true, COL_PRIMARY)) {
         isLoginMode = false;
@@ -1077,32 +1142,51 @@ static const char *GetCurrentCrumbName(void)
         case VIEW_GROUPS:       return "Study Groups";
         case VIEW_GROUP_DETAIL: return "Group Detail";
         case VIEW_GOALS:        return "Learning Goals";
+        case VIEW_SETTINGS:     return "Settings";
         default:                return "Home";
     }
 }
 
 static void DrawTopbar(void)
 {
-    float cx = ContentX();
-    float cw = ContentW();
+    int screenW = (int)GetVirtW();
 
-    DrawTextFit("Workspace  /", PX(cx), 22, 13, 120, COL_MUTED);
-    DrawTextBold(GetCurrentCrumbName(), PX(cx + 82), 22, 13, 180, COL_NAVY);
+    DrawTextFit("Workspace  /", SIDEBAR_W + 30, 20, 13, 120, COL_MUTED);
+    DrawTextBold(GetCurrentCrumbName(), SIDEBAR_W + 114, 20, 13, 220, COL_NAVY);
 
-    float chipW = 195.0f;
-    Rectangle chip = { cx + cw - chipW, 13, chipW, 34 };
-    DrawCard(chip, WHITE, COL_BORDER, 17.0f);
-    DrawAvatar(chip.x + 18, chip.y + 17, 12, currentUserName, TILE_AMBER_BG, COL_NAVY);
-    DrawTextBold(currentUserName, PX(chip.x + 36), PX(chip.y + 10), 12, PX(chipW - 56), COL_NAVY);
-    DrawCircle(PX(chip.x + chipW - 12), PX(chip.y + 17), 4, COL_OK);
+    bool isAdmin = IsCurrentUserAdmin();
+    Font fb = GetFontBold();
+
+    /* Ukur lebar asli nama (maksimal 180px) supaya badge ADMIN nempel rapat setelah nama */
+    float nameW = MeasureTextEx(fb, currentUserName, 13.0f, 0.5f).x;
+    if (nameW > 180.0f) nameW = 180.0f;
+
+    float badgeW   = 50.0f;
+    float badgeGap = 8.0f;
+    float pillW    = 42.0f + nameW + (isAdmin ? (badgeGap + badgeW) : 0.0f) + 28.0f;
+
+    Rectangle pill = { (float)screenW - pillW - 28.0f, 10, pillW, 38 };
+    DrawCard(pill, WHITE, COL_BORDER, 19.0f);
+
+    DrawAvatar(pill.x + 21, pill.y + 19, 13, currentUserName, TILE_AMBER_BG, COL_NAVY);
+    DrawTextBold(currentUserName, PX(pill.x + 42), PX(pill.y + 12), 13, PX(nameW + 2.0f), COL_NAVY);
+
+    if (isAdmin) {
+        float bx = pill.x + 42.0f + nameW + badgeGap;
+        Rectangle badge = { bx, pill.y + 10.0f, badgeW, 18.0f };
+        DrawRectangleRounded(badge, 0.5f, 6, TILE_AMBER_BG);
+        DrawTextBold("ADMIN", PX(badge.x + 8), PX(badge.y + 4), 10, 40, TILE_AMBER_FG);
+    }
+
+    DrawCircle(PX(pill.x + pill.width - 14), PX(pill.y + 19), 4, COL_OK);
 }
 
 static void DrawSidebar(void)
 {
     int screenH = (int)VIRT_H;
 
-    DrawRectangle(0, 0, SIDEBAR_W, screenH, WHITE);
-    DrawRectangle(SIDEBAR_W - 1, 0, 1, screenH, COL_BORDER);
+    DrawRectangle(0, 0, SIDEBAR_W, screenH, ThemeSurface());
+    DrawRectangle(SIDEBAR_W - 1, 0, 1, screenH, ThemeBorder());
 
     DrawBrandLogo(20, 22, 1.0f);
     DrawTextBold("StudyBuddy", 66, 22, 20, SIDEBAR_W - 76, COL_NAVY);
@@ -1126,7 +1210,7 @@ static void DrawSidebar(void)
         bool hover  = MouseOver(r);
 
         if (active || hover) {
-            DrawRectangleRounded(r, 0.32f, 10, COL_PRIMARY_LT);
+            DrawRectangleRounded(r, 0.32f, 10, ThemeHoverLt());
         }
 
         Color txtCol = (active || hover) ? COL_PRIMARY : (Color){ 119, 133, 157, 255 };
@@ -1140,18 +1224,27 @@ static void DrawSidebar(void)
     }
 
     Rectangle prof = { 14, (float)screenH - 116, SIDEBAR_W - 28, 102 };
-    DrawRectangleRounded(prof, 0.22f, 12, (Color){ 242, 246, 255, 255 });
+    Color profBg = isDarkMode ? ThemeSurface2() : (Color){ 242, 246, 255, 255 };
+    DrawRectangleRounded(prof, 0.22f, 12, profBg);
     DrawAvatar(prof.x + 24, prof.y + 28, 16, currentUserName, COL_PRIMARY, WHITE);
-    DrawTextBold(currentUserName, PX(prof.x + 46), PX(prof.y + 14), 13, PX(prof.width - 56), COL_NAVY);
 
-    if (IsCurrentUserAdmin()) {
-        DrawTextFit(currentUserNim, PX(prof.x + 46), PX(prof.y + 31), 11, PX(prof.width - 108), COL_MUTED);
-        Rectangle badge = { prof.x + prof.width - 58, prof.y + 29, 48, 16 };
-        DrawRectangleRounded(badge, 0.5f, 6, TILE_AMBER_BG);
-        DrawTextBold("ADMIN", PX(badge.x + 7), PX(badge.y + 3), 10, 40, TILE_AMBER_FG);
-    } else {
-        DrawTextFit(currentUserNim, PX(prof.x + 46), PX(prof.y + 31), 11, PX(prof.width - 56), COL_MUTED);
+    /* Tombol Setting kecil (hanya logo gear) di kanan atas kartu profil */
+    Rectangle setBtn = { prof.x + prof.width - 32, prof.y + 10, 24, 24 };
+    bool setActive = (currentView == VIEW_SETTINGS);
+    bool setHover  = MouseOver(setBtn);
+    Color setBg    = setActive ? COL_PRIMARY : (setHover ? ThemeHoverLt() : ThemeSurface());
+    Color setFg    = setActive ? WHITE : (setHover ? COL_PRIMARY : ThemeMuted());
+
+    DrawRectangleRounded(setBtn, 0.35f, 8, setBg);
+    DrawGearIcon(setBtn.x + 12.0f, setBtn.y + 12.0f, 6.2f, setFg, setBg);
+
+    if (setHover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        setOldPass[0] = setNewPass[0] = setConfPass[0] = '\0';
+        GoView(VIEW_SETTINGS);
     }
+
+    DrawTextBold(currentUserName, PX(prof.x + 46), PX(prof.y + 14), 13, PX(prof.width - 82), COL_NAVY);
+    DrawTextFit(currentUserNim, PX(prof.x + 46), PX(prof.y + 31), 11, PX(prof.width - 82), COL_MUTED);
 
     if (Button((Rectangle){ prof.x + 12, prof.y + 60, prof.width - 24, 28 }, "Log Out", true, COL_ERR)) {
         isLoggedIn = false;
@@ -1475,8 +1568,8 @@ static void DrawFindBuddyScreen(void)
     bool fHover = CheckCollisionPointCircle(GetUiMouse(), fCenter, filterBtnSize * 0.5f);
     bool hasFilter = (findCourseFilter[0] != '\0');
 
-    Color btnFill   = (showFindFilterBox || hasFilter) ? COL_PRIMARY : (fHover ? COL_PRIMARY_LT : WHITE);
-    Color btnBorder = (showFindFilterBox || hasFilter || fHover) ? COL_PRIMARY : COL_BORDER;
+    Color btnFill   = (showFindFilterBox || hasFilter) ? COL_PRIMARY : (fHover ? ThemeHoverLt() : ThemeSurface());
+    Color btnBorder = (showFindFilterBox || hasFilter || fHover) ? COL_PRIMARY : ThemeBorder();
     Color iconCol   = (showFindFilterBox || hasFilter) ? WHITE : COL_PRIMARY;
 
     DrawCircleV(fCenter, filterBtnSize * 0.5f, btnFill);
@@ -1543,14 +1636,14 @@ static void DrawFindBuddyScreen(void)
             DrawTextFit(nimStr, PX(card.x + 62), PX(card.y + 37), 11, PX(cardW - 76), COL_MUTED);
 
             Rectangle chip = { card.x + 14, card.y + 66, cardW - 28, 24 };
-            DrawRectangleRounded(chip, 0.35f, 8, (Color){ 241, 245, 252, 255 });
-            DrawTextBold(buddies[i].matkul, PX(chip.x + 10), PX(chip.y + 6), 11, PX(chip.width - 20), COL_PRIMARY);
+            Color chipBg = isDarkMode ? ThemeHoverLt() : (Color){ 241, 245, 252, 255 };
+            Color chipFg = isDarkMode ? (Color){ 147, 197, 253, 255 } : COL_PRIMARY;
+            DrawRectangleRounded(chip, 0.35f, 8, chipBg);
+            DrawTextBold(buddies[i].matkul, PX(chip.x + 10), PX(chip.y + 6), 11, PX(chip.width - 20), chipFg);
 
             DrawTextFit(buddies[i].hari, PX(card.x + 14), PX(card.y + 98), 11, PX(cardW - 28), COL_MUTED);
 
-            float btnW = (cardW - 36.0f) * 0.56f;
-            float invW = (cardW - 36.0f) - btnW;
-            if (Button((Rectangle){ card.x + 14, card.y + cardH - 42, btnW, 30 }, "Send message", true, COL_PRIMARY)) {
+            if (Button((Rectangle){ card.x + 14, card.y + cardH - 42, cardW - 28, 30 }, "Send message", true, COL_PRIMARY)) {
                 OpenDirectChatWithNim(buddies[i].nim, buddies[i].nama);
             }
         }
@@ -1569,7 +1662,7 @@ static void DrawFindBuddyScreen(void)
         float popH = 122.0f;
         Rectangle pop = { fBtn.x + filterBtnSize - popW, fBtn.y + filterBtnSize + 8.0f, popW, popH };
 
-        DrawRectangleRounded((Rectangle){ pop.x + 2, pop.y + 4, pop.width, pop.height }, 0.16f, 12, Fade(COL_NAVY, 0.10f));
+        DrawRectangleRounded((Rectangle){ pop.x + 2, pop.y + 4, pop.width, pop.height }, 0.16f, 12, Fade(COL_NAVY, 0.18f));
         DrawCard(pop, WHITE, COL_PRIMARY, 14.0f);
 
         DrawTextBold("FILTER FOKUS MATA KULIAH", PX(pop.x + 14), PX(pop.y + 12), 10, 200, COL_MUTED);
@@ -1604,12 +1697,10 @@ static void DrawScheduleScreen(void)
     float cx = ContentX();
     float cw = ContentW();
 
-    /* Baris input mata kuliah/materi fokus bebas (real-time ke panel rekomendasi) */
     DrawTextBold("Fokus Mata Kuliah / Materi:", PX(cx), 124, 13, 240, COL_NAVY);
     TextInput(ID_SCHED_COURSE, (Rectangle){ cx, 144, cw, 40 }, schedCourse, sizeof schedCourse,
               "Ketik nama mata kuliah atau materi (contoh: Kalkulus, Basis Data, Algoritma)...", false);
 
-    /* Bersihkan spasi ujung sementara untuk pencocokan real-time */
     char liveCourse[MAX_MATKUL];
     snprintf(liveCourse, sizeof liveCourse, "%s", schedCourse);
     SanitizeText(liveCourse);
@@ -1621,12 +1712,13 @@ static void DrawScheduleScreen(void)
         Rectangle dr = { cx + d * (dayW + 10.0f), 196, dayW, 42 };
         bool sel = (d == selectedDayIdx);
         bool hover = MouseOver(dr);
-        DrawCard(dr, sel ? COL_PRIMARY : (hover ? COL_PRIMARY_LT : WHITE), sel ? COL_PRIMARY : COL_BORDER, 12.0f);
+        DrawCard(dr, sel ? COL_PRIMARY : (hover ? ThemeHoverLt() : ThemeSurface()),
+                 sel ? COL_PRIMARY : ThemeBorder(), 12.0f);
 
         Font fb = GetFontBold();
         Vector2 s1 = MeasureTextEx(fb, DAY_OPTIONS[d], 14.0f, 0.5f);
         DrawTextEx(fb, DAY_OPTIONS[d], (Vector2){ dr.x + (dayW - s1.x) / 2.0f, dr.y + (dr.height - s1.y) / 2.0f },
-                   14.0f, 0.5f, sel ? WHITE : COL_TEXT);
+                   14.0f, 0.5f, sel ? WHITE : ThemeInk());
 
         if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) selectedDayIdx = d;
     }
@@ -1654,19 +1746,23 @@ static void DrawScheduleScreen(void)
         bool locked = (!chk && checkedCount >= 2);
         bool hover = !locked && MouseOver(sr);
 
-        Color cardBg = chk ? COL_PRIMARY_LT : (locked ? (Color){ 240, 243, 248, 255 } : (hover ? COL_PRIMARY_LT : WHITE));
-        Color cardBd = chk ? COL_PRIMARY : COL_BORDER;
-        Color txtCol = chk ? COL_NAVY : (locked ? COL_DISABLED : COL_TEXT);
+        Color lockedBg = isDarkMode ? (Color){ 21, 30, 48, 255 } : (Color){ 240, 243, 248, 255 };
+        Color lockedCb = isDarkMode ? (Color){ 51, 65, 85, 255 } : (Color){ 220, 225, 235, 255 };
+        Color lockedTx = isDarkMode ? (Color){ 100, 116, 139, 255 } : COL_DISABLED;
+
+        Color cardBg = chk ? ThemeHoverLt() : (locked ? lockedBg : (hover ? ThemeHoverLt() : ThemeSurface()));
+        Color cardBd = chk ? COL_PRIMARY : ThemeBorder();
+        Color txtCol = chk ? ThemeInk() : (locked ? lockedTx : ThemeInk());
 
         DrawCard(sr, cardBg, cardBd, 12.0f);
         DrawTextFit(SESSION_OPTIONS[s], PX(sr.x + 16), PX(sr.y + 12), 14, PX(leftW - 95), txtCol);
 
         if (locked) {
-            DrawTextFit("Locked", PX(sr.x + sr.width - 86), PX(sr.y + 13), 12, 50, COL_DISABLED);
+            DrawTextFit("Locked", PX(sr.x + sr.width - 86), PX(sr.y + 13), 12, 50, lockedTx);
         }
 
         Rectangle cb = { sr.x + sr.width - 34, sr.y + 9, 22, 22 };
-        DrawRectangleRounded(cb, 0.3f, 6, chk ? COL_PRIMARY : (locked ? (Color){ 220, 225, 235, 255 } : COL_BORDER));
+        DrawRectangleRounded(cb, 0.3f, 6, chk ? COL_PRIMARY : (locked ? lockedCb : ThemeBorder()));
         if (chk) DrawCircle(PX(cb.x + 11), PX(cb.y + 11), 5, WHITE);
 
         if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
@@ -1687,26 +1783,18 @@ static void DrawScheduleScreen(void)
              hasLiveCourse ? liveCourse : currentUserCourse);
     DrawTextBold(schedTitle, PX(matchCard.x + 18), PX(matchCard.y + 14), 13, PX(rightW - 36), COL_PRIMARY);
 
-    /*
-     * Sistem Ranking Real-Time:
-     * Tier 4: Fokus Matkul Cocok + Hari & Semua Slot Cocok
-     * Tier 3: Fokus Matkul Cocok + Hari & Minimal 1 Slot Cocok
-     * Tier 2: Fokus Matkul Cocok (meski hari/jam berbeda, selama user sedang mengetik fokus matkul)
-     * Tier 1 (Fallback): Fokus Matkul Lain, tapi Hari & Minimal 1 Slot Cocok (hanya muncul jika Tier 2-4 kosong)
-     */
     int recIdx[3]  = { -1, -1, -1 };
     int recTier[3] = {  0,  0,  0 };
     int recCount   = 0;
 
-    int minTierAllowed = 2; /* Utama: cari yang fokus mata kuliahnya sesuai dulu */
+    int minTierAllowed = 2;
     for (int pass = 0; pass < 2 && recCount == 0; pass++) {
-        if (pass == 1) minTierAllowed = 1; /* Fallback: jika fokus matkul tidak ditemukan, tampilkan jadwal sama */
+        if (pass == 1) minTierAllowed = 1;
 
         for (int tier = 4; tier >= minTierAllowed && recCount < 3; tier--) {
             for (int i = 0; i < buddyCount && recCount < 3; i++) {
                 if (strcmp(buddies[i].nim, currentUserNim) == 0) continue;
 
-                /* Cek apakah buddy sudah masuk daftar */
                 bool alreadyAdded = false;
                 for (int r = 0; r < recCount; r++) {
                     if (recIdx[r] == i) { alreadyAdded = true; break; }
@@ -1733,7 +1821,7 @@ static void DrawScheduleScreen(void)
                     else if (slotMatches >= 1)                 bTier = 3;
                     else                                       bTier = 2;
                 } else if (slotMatches >= 1) {
-                    bTier = 1; /* Fokus lain dengan hari & slot jam yang sama */
+                    bTier = 1;
                 }
 
                 if (bTier == tier) {
@@ -1778,8 +1866,8 @@ static void DrawScheduleScreen(void)
                 badgeFg  = COL_OK;
             } else if (recTier[m] == 2) {
                 badgeTxt = "Matkul Sama";
-                badgeBg  = COL_PRIMARY_LT;
-                badgeFg  = COL_PRIMARY;
+                badgeBg  = isDarkMode ? ThemeHoverLt() : COL_PRIMARY_LT;
+                badgeFg  = isDarkMode ? (Color){ 147, 197, 253, 255 } : COL_PRIMARY;
             }
 
             Rectangle badge = { matchCard.x + rightW - 104, my + 6, 88, 22 };
@@ -2384,6 +2472,160 @@ static void DrawGoalsScreen(void)
 }
 
 /* ====================================================================== */
+/* SCREEN 9: Settings (Appearance & Update Password)                      */
+/* ====================================================================== */
+
+static void HandlePasswordUpdate(void)
+{
+    if (loggedBuddyIdx < 0 || loggedBuddyIdx >= buddyCount) return;
+
+    if (setOldPass[0] == '\0' || setNewPass[0] == '\0' || setConfPass[0] == '\0') {
+        SetStatus("Lengkapi semua kolom password terlebih dahulu.", COL_ERR);
+        return;
+    }
+    if (strcmp(buddies[loggedBuddyIdx].password, setOldPass) != 0) {
+        SetStatus("Password awal (saat ini) tidak sesuai!", COL_ERR);
+        return;
+    }
+    if (strlen(setNewPass) < 4) {
+        SetStatus("Password terbaru minimal 4 karakter.", COL_ERR);
+        return;
+    }
+    if (strcmp(setNewPass, setConfPass) != 0) {
+        SetStatus("Konfirmasi password terbaru tidak cocok!", COL_ERR);
+        return;
+    }
+    if (strcmp(setOldPass, setNewPass) == 0) {
+        SetStatus("Password terbaru tidak boleh sama dengan password lama.", COL_WARN);
+        return;
+    }
+
+    char cleanPass[MAX_PASS];
+    snprintf(cleanPass, sizeof cleanPass, "%s", setNewPass);
+    SanitizeText(cleanPass);
+
+    snprintf(buddies[loggedBuddyIdx].password, sizeof buddies[loggedBuddyIdx].password, "%s", cleanPass);
+    Persist();
+
+    setOldPass[0] = setNewPass[0] = setConfPass[0] = '\0';
+    focusId = -1;
+    SetStatus("Password berhasil diperbarui dan disimpan!", COL_OK);
+}
+
+static void DrawSettingsScreen(void)
+{
+    DrawEditorialHeader("ACCOUNT & PREFERENCES",
+                        "Settings",
+                        "Atur tampilan tema aplikasi dan perbarui keamanan password akunmu.",
+                        NULL);
+
+    float cx = ContentX();
+    float cw = ContentW();
+    float gap = 18.0f;
+
+    float leftW  = (cw - gap) * 0.44f;
+    float rightW = cw - leftW - gap;
+    float topY   = 130.0f;
+    float cardH  = ContentBottom() - topY;
+
+    /* --- KOLOM KIRI: Appearance (Light Mode / Dark Mode) --- */
+    Rectangle appCard = { cx, topY, leftW, cardH };
+    DrawCard(appCard, WHITE, COL_BORDER, 18.0f);
+
+    DrawTextBold("Appearance & Theme", PX(appCard.x + 22), PX(appCard.y + 20), 17, PX(leftW - 44), COL_NAVY);
+    DrawTextFit("Pilih tema warna antarmuka yang nyaman untuk matamu.",
+                PX(appCard.x + 22), PX(appCard.y + 46), 12, PX(leftW - 44), COL_MUTED);
+
+    /* Kartu Pilihan Light Mode */
+    Rectangle lightOpt = { appCard.x + 22, appCard.y + 84, leftW - 44, 78 };
+    bool hoverLight = MouseOver(lightOpt);
+    DrawCard(lightOpt, !isDarkMode ? ThemeHoverLt() : ThemeSurface2(),
+             !isDarkMode ? COL_PRIMARY : (hoverLight ? COL_PRIMARY : COL_BORDER), 14.0f);
+
+    DrawCircleV((Vector2){ lightOpt.x + 30, lightOpt.y + 39 }, 14.0f, TILE_AMBER_BG);
+    DrawCircleV((Vector2){ lightOpt.x + 30, lightOpt.y + 39 }, 7.0f, TILE_AMBER_FG);
+    DrawTextBold("Light Mode", PX(lightOpt.x + 56), PX(lightOpt.y + 20), 15, 160, COL_NAVY);
+    DrawTextFit("Tampilan cerah & bersih", PX(lightOpt.x + 56), PX(lightOpt.y + 42), 12, 180, COL_MUTED);
+
+    if (!isDarkMode) {
+        DrawCircleV((Vector2){ lightOpt.x + lightOpt.width - 24, lightOpt.y + 39 }, 9.0f, COL_PRIMARY);
+        DrawCircleV((Vector2){ lightOpt.x + lightOpt.width - 24, lightOpt.y + 39 }, 3.5f, WHITE);
+    } else {
+        DrawCircleLines(PX(lightOpt.x + lightOpt.width - 24), PX(lightOpt.y + 39), 9.0f, COL_DISABLED);
+    }
+
+    if (hoverLight && IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && isDarkMode) {
+        isDarkMode = false;
+        SetStatus("Tema diubah ke Light Mode.", COL_OK);
+    }
+
+    /* Kartu Pilihan Dark Mode */
+    Rectangle darkOpt = { appCard.x + 22, appCard.y + 176, leftW - 44, 78 };
+    bool hoverDark = MouseOver(darkOpt);
+    DrawCard(darkOpt, isDarkMode ? ThemeHoverLt() : ThemeSurface2(),
+             isDarkMode ? COL_PRIMARY : (hoverDark ? COL_PRIMARY : COL_BORDER), 14.0f);
+
+    DrawCircleV((Vector2){ darkOpt.x + 30, darkOpt.y + 39 }, 14.0f, (Color){ 30, 41, 59, 255 });
+    DrawCircleV((Vector2){ darkOpt.x + 28, darkOpt.y + 39 }, 6.5f, TILE_AMBER_FG);
+    DrawCircleV((Vector2){ darkOpt.x + 31, darkOpt.y + 37 }, 5.5f, (Color){ 30, 41, 59, 255 });
+    DrawTextBold("Dark Mode", PX(darkOpt.x + 56), PX(darkOpt.y + 20), 15, 160, COL_NAVY);
+    DrawTextFit("Nyaman di ruangan redup", PX(darkOpt.x + 56), PX(darkOpt.y + 42), 12, 180, COL_MUTED);
+
+    if (isDarkMode) {
+        DrawCircleV((Vector2){ darkOpt.x + darkOpt.width - 24, darkOpt.y + 39 }, 9.0f, COL_PRIMARY);
+        DrawCircleV((Vector2){ darkOpt.x + darkOpt.width - 24, darkOpt.y + 39 }, 3.5f, WHITE);
+    } else {
+        DrawCircleLines(PX(darkOpt.x + darkOpt.width - 24), PX(darkOpt.y + 39), 9.0f, COL_DISABLED);
+    }
+
+    if (hoverDark && IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !isDarkMode) {
+        isDarkMode = true;
+        SetStatus("Tema diubah ke Dark Mode.", COL_OK);
+    }
+
+    /* Info Akun Singkat di Bawah */
+    Rectangle infoBox = { appCard.x + 22, appCard.y + cardH - 96, leftW - 44, 74 };
+    DrawRectangleRounded(infoBox, 0.22f, 10, ThemeSurface2());
+    DrawTextBold("Logged in as:", PX(infoBox.x + 14), PX(infoBox.y + 12), 11, 160, COL_PRIMARY);
+    DrawTextBold(currentUserName, PX(infoBox.x + 14), PX(infoBox.y + 29), 14, PX(infoBox.width - 28), COL_NAVY);
+    char nimCourse[100];
+    snprintf(nimCourse, sizeof nimCourse, "NIM %s  |  %s", currentUserNim, currentUserCourse);
+    DrawTextFit(nimCourse, PX(infoBox.x + 14), PX(infoBox.y + 49), 11, PX(infoBox.width - 28), COL_MUTED);
+
+    /* --- KOLOM KANAN: Update Password --- */
+    float rx = cx + leftW + gap;
+    Rectangle passCard = { rx, topY, rightW, cardH };
+    DrawCard(passCard, WHITE, COL_BORDER, 18.0f);
+
+    float fx = passCard.x + 24;
+    float fw = rightW - 48;
+
+    DrawTextBold("Update Password", PX(fx), PX(passCard.y + 20), 17, PX(fw), COL_NAVY);
+    DrawTextFit("Masukkan password awalmu lalu buat password baru.",
+                PX(fx), PX(passCard.y + 46), 12, PX(fw), COL_MUTED);
+
+    float fy = passCard.y + 84;
+
+    DrawTextBold("Password Awal (Saat Ini)", PX(fx), PX(fy), 13, 240, COL_TEXT);
+    TextInputMasked(ID_SET_OLD_PASS, (Rectangle){ fx, fy + 20, fw, 42 },
+                    setOldPass, MAX_PASS, "Masukkan password saat ini...");
+
+    DrawTextBold("Password Terbaru", PX(fx), PX(fy + 76), 13, 240, COL_TEXT);
+    TextInputMasked(ID_SET_NEW_PASS, (Rectangle){ fx, fy + 96, fw, 42 },
+                    setNewPass, MAX_PASS, "Minimal 4 karakter...");
+
+    DrawTextBold("Konfirmasi Password Terbaru", PX(fx), PX(fy + 152), 13, 260, COL_TEXT);
+    if (TextInputMasked(ID_SET_CONF_PASS, (Rectangle){ fx, fy + 172, fw, 42 },
+                        setConfPass, MAX_PASS, "Ketik ulang password terbaru...")) {
+        HandlePasswordUpdate();
+    }
+
+    if (Button((Rectangle){ fx, passCard.y + cardH - 66, fw, 44 }, "Simpan Password Baru", true, COL_PRIMARY)) {
+        HandlePasswordUpdate();
+    }
+}
+
+/* ====================================================================== */
 /* FLOATING CHAT BOX (Tab Kecil di Pojok Kanan Bawah, Max 12 Pesan/Room)  */
 /* ====================================================================== */
 
@@ -2462,7 +2704,7 @@ static void DrawFloatingChatBox(void)
         DrawTextBold(tabLabel, PX(minBtn.x + 36), PX(minBtn.y + 14), 13, 136, COL_NAVY);
 
         Rectangle plusBadge = { minBtn.x + minW - 34.0f, minBtn.y + 9.0f, 26.0f, 26.0f };
-        DrawRectangleRounded(plusBadge, 0.5f, 8, COL_PRIMARY_LT);
+        DrawRectangleRounded(plusBadge, 0.5f, 8, ThemeHoverLt());
         DrawTextBold("+", PX(plusBadge.x + 9), PX(plusBadge.y + 4), 16, 16, COL_PRIMARY);
 
         if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
@@ -2542,7 +2784,7 @@ static void DrawFloatingChatBox(void)
 
     /* Gambar Frame Kartu Chat */
     DrawRectangleRounded((Rectangle){ chatWinRect.x + 3, chatWinRect.y + 6, chatWinRect.width, chatWinRect.height },
-                         0.06f, 12, (Color){ 24, 52, 95, 22 });
+                         0.06f, 12, Fade(BLACK, isDarkMode ? 0.35f : 0.10f));
     DrawCard(chatWinRect, WHITE, COL_BORDER, 18.0f);
 
     DrawRectangleRounded((Rectangle){ chatWinRect.x + 1, chatWinRect.y + 1, chatWinRect.width - 2, 43.0f },
@@ -2561,7 +2803,11 @@ static void DrawFloatingChatBox(void)
 
     Rectangle ddRect  = { chatWinRect.x + pad, chatWinRect.y + 52.0f, innerW, 34.0f };
     Rectangle msgArea = { chatWinRect.x + pad, chatWinRect.y + 94.0f, innerW, chatWinRect.height - 148.0f };
-    DrawRectangleRounded(msgArea, 0.06f, 10, (Color){ 247, 249, 253, 255 });
+
+    /* Kotak dalam area chat: gelap bertingkat + border agar jelas terpisah dari frame */
+    Color msgBoxFill   = isDarkMode ? (Color){ 18, 26, 43, 255 } : (Color){ 247, 249, 253, 255 };
+    Color msgBoxBorder = isDarkMode ? (Color){ 58, 74, 98, 255 } : COL_BORDER;
+    DrawCard(msgArea, msgBoxFill, msgBoxBorder, 12.0f);
 
     /* Area Bubble Chat */
     Camera2D cam = GetUiCamera();
@@ -2597,9 +2843,11 @@ static void DrawFloatingChatBox(void)
                 DrawRectangleRounded(b, 0.32f, 10, COL_PRIMARY);
                 DrawTextWrap(cm->text, PX(b.x + 10), PX(b.y + 8), 12, PX(bubbleW - 20), 15, WHITE, 2);
             } else {
-                DrawTextBold(cm->sender, PX(msgArea.x + 10), PX(y), 11, PX(innerW - 20), COL_NAVY);
+                DrawTextBold(cm->sender, PX(msgArea.x + 10), PX(y), 11, PX(innerW - 20),
+                             isDarkMode ? (Color){ 147, 197, 253, 255 } : COL_NAVY);
                 Rectangle b = { msgArea.x + 8.0f, y + 14.0f, bubbleW, bubbleH };
-                DrawCard(b, WHITE, COL_BORDER, 12.0f);
+                DrawCard(b, isDarkMode ? (Color){ 36, 49, 71, 255 } : WHITE,
+                         isDarkMode ? (Color){ 64, 82, 109, 255 } : COL_BORDER, 12.0f);
                 DrawTextWrap(cm->text, PX(b.x + 10), PX(b.y + 8), 12, PX(bubbleW - 20), 15, COL_TEXT, 2);
                 y += 14.0f;
             }
@@ -2641,7 +2889,6 @@ static void DrawFloatingChatBox(void)
     bool enter = TextInput(ID_CHAT_INPUT, inputBoxRect, chatInput, MAX_CHAT_LEN,
                            roomCount > 0 ? "Type a message..." : "Pilih grup/teman dulu...", false);
 
-    /* Pertahankan fokus pada frame pembukaan chat */
     if (justOpenedChat) {
         focusId = ID_CHAT_INPUT;
         justOpenedChat = false;
@@ -2676,7 +2923,7 @@ static void DrawFloatingChatBox(void)
             snprintf(activeChatTitle, sizeof activeChatTitle, "%s", roomLabels[chatRoomDd.selected]);
         }
     } else {
-        DrawCard(ddRect, (Color){ 244, 246, 250, 255 }, COL_BORDER, 10.0f);
+        DrawCard(ddRect, ThemeSurface2(), ThemeBorder(), 10.0f);
         DrawTextFit("Belum ada grup atau kontak DM", PX(ddRect.x + 12), PX(ddRect.y + 9), 13, PX(innerW - 24), COL_MUTED);
     }
 
@@ -2721,12 +2968,12 @@ void GuiUpdateAndDraw(void)
     if (IsKeyPressed(KEY_ESCAPE)) {
         focusId = -1;
         showFindFilterBox = false;
-        showInviteModal = false; // <-- TAMBAH
+        showInviteModal = false;
         chatRoomDd.open = false;
     }
 
     BeginDrawing();
-    ClearBackground(COL_BG);
+    ClearBackground(ThemeBg());
 
     Camera2D baseCam = GetUiCamera();
     BeginMode2D(baseCam);
@@ -2746,6 +2993,7 @@ void GuiUpdateAndDraw(void)
             case VIEW_GROUPS:       DrawGroupsScreen();      break;
             case VIEW_GROUP_DETAIL: DrawGroupDetailScreen(); break;
             case VIEW_GOALS:        DrawGoalsScreen();       break;
+            case VIEW_SETTINGS:     DrawSettingsScreen();    break;
             default:                DrawHomeScreen();        break;
         }
         DrawFloatingChatBox();
